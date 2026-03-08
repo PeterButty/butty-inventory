@@ -1522,7 +1522,7 @@ Purchasing Department`;
                     )}
                   </div>
                   <div style={{ marginLeft:"auto", display:"flex", alignItems:"center" }}>
-                    <button className="btn-success" style={{ padding:"10px 20px", fontSize:12 }} onClick={()=>{ setMachineModal(null); setTimeout(()=>{ setCommitQty(1); setConfirmCommit(m); }, 50); }} disabled={max===0} style={{ opacity:max===0?0.4:1, cursor:max===0?"not-allowed":"pointer", padding:"10px 20px" }}>
+                    <button className="btn-success" style={{ padding:"10px 20px", fontSize:12, opacity:max===0?0.4:1, cursor:max===0?"not-allowed":"pointer" }} onClick={()=>{ setMachineModal(null); setTimeout(()=>{ setCommitQty(1); setConfirmCommit(m); }, 50); }} disabled={max===0}>
                       ✓ Commit Build
                     </button>
                   </div>
