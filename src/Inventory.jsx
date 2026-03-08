@@ -484,7 +484,7 @@ Purchasing Department`;
 
   function addComponent()    { setMachineForm(f => ({ ...f, components:[...f.components, { productId:'', qty:1, note:'' }] })); }
   function updateComponent(idx, field, val) {
-    setMachineForm(f => { const comps=[...f.components]; comps[idx]={...comps[idx],[field]:field==='qty'||field==='productId'?(parseInt(val)||''):val}; return {...f,components:comps}; });
+    setMachineForm(f => { const comps=[...f.components]; comps[idx]={...comps[idx],[field]:field==='qty'?(parseInt(val)||1):val}; return {...f,components:comps}; });
   }
   function removeComponent(idx) { setMachineForm(f => ({ ...f, components:f.components.filter((_,i)=>i!==idx) })); }
 
