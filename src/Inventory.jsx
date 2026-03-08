@@ -102,17 +102,19 @@ export default function Inventory({ user, onSignOut }) {
 
   async function loadAll() {
     setLoading(true);
-    const [pRes, mRes, sRes] = await Promise.all([
-      supabase.from('products').select('*').order('name'),
-      supabase.from('machines').select('*, machine_components(*)').order('name'),
-      supabase.from('suppliers').select('*, supplier_products(product_id)').order('name'),
-    ]);
+    // Products (always exists)
+    const pRes = await supabase.from('products').select('*').order('name');
     if (pRes.error) showToast('Error loading products: ' + pRes.error.message, 'error');
     else setProducts(pRes.data.map(dbProduct));
-    if (mRes.error) showToast('Error loading machines: ' + mRes.error.message, 'error');
-    else setMachines(mRes.data.map(dbMachine));
-    if (sRes.error) showToast('Error loading suppliers: ' + sRes.error.message, 'error');
-    else setSuppliers(sRes.data.map(dbSupplier));
+
+    // Machines (may not exist if migration hasn't run)
+    const mRes = await supabase.from('machines').select('*, machine_components(*)').order('name');
+    if (!mRes.error) setMachines(mRes.data.map(dbMachine));
+
+    // Suppliers (may not exist if migration hasn't run)
+    const sRes = await supabase.from('suppliers').select('*, supplier_products(product_id)').order('name');
+    if (!sRes.error) setSuppliers(sRes.data.map(dbSupplier));
+
     setLoading(false);
   }
 
@@ -122,7 +124,7 @@ export default function Inventory({ user, onSignOut }) {
       id: r.id, sku: r.sku, name: r.name, category: r.category,
       stock: r.stock, minStock: r.min_stock, reorderQty: r.reorder_qty || 0,
       unit: r.unit, location: r.location, imageUrl: r.image_url,
-      supplierId: r.supplier_id, partType: r.part_type || 'purchased',
+      supplierId: r.supplier_id || null, partType: r.part_type || 'purchased',
       rawMaterials: r.raw_materials || [], batchSize: r.batch_size || 0,
       leadTimeDays: r.lead_time_days || 0,
     };
@@ -356,20 +358,24 @@ Purchasing Department`;
     const { error: pErr } = await supabase.from('products').upsert(payload);
     if (pErr) { showToast('Save failed: ' + pErr.message, 'error'); setSaving(false); return; }
 
-    // Sync supplier_products
-    await supabase.from('supplier_products').delete().eq('product_id', id);
-    if (form.supplierId) {
-      await supabase.from('supplier_products').insert({ supplier_id:form.supplierId, product_id:id });
-    }
+    // Sync supplier_products (silently skip if table doesn't exist yet)
+    try {
+      await supabase.from('supplier_products').delete().eq('product_id', id);
+      if (form.supplierId) {
+        await supabase.from('supplier_products').insert({ supplier_id:form.supplierId, product_id:id });
+      }
+    } catch(e) { /* migration not yet run */ }
 
-    // Sync machine_components from machineLinks
-    await supabase.from('machine_components').delete().eq('product_id', id);
-    const links = form.machineLinks || [];
-    if (links.length > 0) {
-      await supabase.from('machine_components').insert(
-        links.map(l => ({ machine_id:l.machineId, product_id:id, qty:l.qty, note:l.note||'' }))
-      );
-    }
+    // Sync machine_components from machineLinks (silently skip if table doesn't exist yet)
+    try {
+      await supabase.from('machine_components').delete().eq('product_id', id);
+      const links = form.machineLinks || [];
+      if (links.length > 0) {
+        await supabase.from('machine_components').insert(
+          links.map(l => ({ machine_id:l.machineId, product_id:id, qty:l.qty, note:l.note||'' }))
+        );
+      }
+    } catch(e) { /* migration not yet run */ }
 
     showToast(modal.mode === 'add' ? 'Product added!' : 'Product updated!');
     await loadAll();
@@ -506,6 +512,53 @@ Purchasing Department`;
     { label:'Out of Stock', value:stats.out,   color:'#FF3B3B', filter:'out' },
   ];
 
+
+  // ── Styles ───────────────────────────────────────────────────────────────
+  const css = `
+    @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@700;800&display=swap');
+    *{box-sizing:border-box;margin:0;padding:0}
+    ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#444;border-radius:3px}
+    input,select{outline:none}
+    .row-hover:hover{background:${t.rowHover}!important}
+    .btn-primary{background:${t.accent};color:#fff;border:none;padding:9px 20px;font-family:'DM Mono',monospace;font-size:12px;font-weight:500;cursor:pointer;letter-spacing:0.08em;text-transform:uppercase;transition:opacity 0.15s}
+    .btn-primary:hover{opacity:0.85}
+    .btn-ghost{background:transparent;color:${t.textMid};border:1px solid ${t.borderStrong};padding:7px 14px;font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;letter-spacing:0.06em;transition:all 0.15s}
+    .btn-ghost:hover{border-color:${t.textDim};color:${t.text}}
+    .btn-danger{background:transparent;color:#FF3B3B;border:1px solid rgba(255,59,59,0.3);padding:5px 10px;font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;transition:all 0.15s}
+    .btn-danger:hover{background:rgba(255,59,59,0.1)}
+    .btn-success{background:rgba(48,209,88,0.15);color:#30D158;border:1px solid rgba(48,209,88,0.4);padding:7px 14px;font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;letter-spacing:0.06em;transition:all 0.15s}
+    .btn-success:hover{background:rgba(48,209,88,0.25)}
+    .chip{display:inline-flex;align-items:center;padding:3px 10px;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;cursor:pointer;border:1px solid transparent;transition:all 0.15s}
+    .chip.active{border-color:${t.text};color:${t.text}}
+    .chip:not(.active){color:${t.textDim};border-color:${t.border}}
+    .chip:not(.active):hover{border-color:${t.textMid};color:${t.textMid}}
+    .field-input{background:${t.inputBg};border:1px solid ${t.borderStrong};color:${t.text};padding:9px 12px;font-family:'DM Mono',monospace;font-size:12px;width:100%;transition:border-color 0.15s}
+    .field-input:focus{border-color:${t.accent}}
+    .field-input::placeholder{color:${t.textDim}}
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px)}
+    .modal-box{background:${t.modalBg};border:1px solid ${t.borderStrong};padding:32px;width:560px;max-width:96vw;max-height:92vh;overflow-y:auto}
+    .sort-btn{background:none;border:none;color:inherit;cursor:pointer;font-family:inherit;font-size:inherit;display:flex;align-items:center;gap:4px;padding:0}
+    .sort-btn:hover{color:${t.text}}
+    .lightbox{position:fixed;inset:0;background:rgba(0,0,0,0.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:200;backdrop-filter:blur(8px);cursor:zoom-out}
+    .toast{position:fixed;bottom:28px;right:28px;padding:12px 20px;font-size:12px;letter-spacing:0.06em;z-index:300;border:1px solid;animation:fadeIn 0.2s ease}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+    .stat-card{padding:20px 24px;cursor:pointer;transition:all 0.2s}
+    .stat-card:hover{transform:translateY(-1px)}
+    .machine-card{border:1px solid ${t.border};background:${t.cardBg};padding:24px;transition:border-color 0.2s}
+    .machine-card:hover{border-color:${t.borderStrong}}
+    .tab-btn{padding:10px 24px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;cursor:pointer;border:none;transition:all 0.2s}
+    .tab-btn.active{background:${t.accent};color:#fff}
+    .tab-btn:not(.active){background:transparent;color:${t.textDim};border-bottom:2px solid transparent}
+    .tab-btn:not(.active):hover{color:${t.text}}
+    .settings-panel{position:absolute;top:72px;right:40px;background:${t.modalBg};border:1px solid ${t.borderStrong};padding:24px;width:280px;z-index:50;box-shadow:0 8px 32px rgba(0,0,0,0.5);animation:fadeIn 0.15s ease}
+    .theme-swatch{display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;border:1px solid transparent;transition:all 0.15s;margin-bottom:6px}
+    .theme-swatch:hover{border-color:${t.borderStrong}}
+    .theme-swatch.selected{border-color:${t.accent};background:rgba(100,100,255,0.05)}
+    .bom-row{display:grid;grid-template-columns:1fr auto 1fr auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid ${t.border};margin-bottom:6px;background:${t.inputBg}}
+    .build-bar{height:6px;border-radius:3px;overflow:hidden;background:${t.border};margin-top:4px}
+    .build-bar-inner{height:100%;border-radius:3px;transition:width 0.4s ease}
+    .bottleneck-badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#FF9500;border:1px solid rgba(255,149,0,0.4);background:rgba(255,149,0,0.1);padding:2px 8px;letter-spacing:0.06em}
+  `;
 
   // ── Render ─────────────────────────────────────────────────────────────────
   if (loading) return (
