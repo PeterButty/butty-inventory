@@ -45,13 +45,9 @@ export default function Login() {
 
       <div style={{ width: 380, padding: 40, background: '#0F0F18', border: '1px solid #1E1E28' }}>
         {/* Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 36 }}>
-          <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 800, color: '#2B3FE0', letterSpacing: '-0.02em' }}>butty</div>
-          <div style={{ width: 1, height: 28, background: '#2A2A35' }} />
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 500, color: '#E8E8F0', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Manufacturing</div>
-            <div style={{ fontSize: 9, color: '#444', letterSpacing: '0.12em' }}>INVENTORY SYSTEM</div>
-          </div>
+        <div style={{ marginBottom: 36 }}>
+          <img src={LOGO_URL} alt="Butty" style={{ height: 48, width: 'auto', maxWidth: '100%', objectFit: 'contain', display: 'block' }} />
+          <div style={{ fontSize: 9, color: '#444', letterSpacing: '0.12em', marginTop: 8 }}>INVENTORY SYSTEM</div>
         </div>
 
         <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 15, fontWeight: 700, color: '#E8E8F0', marginBottom: 24, letterSpacing: '-0.01em' }}>
