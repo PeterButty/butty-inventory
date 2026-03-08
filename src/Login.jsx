@@ -30,16 +30,16 @@ export default function Login() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0A0A0F', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'DM Mono', monospace" }}>
+    <div style={{ minHeight: '100vh', background: '#0A0A0F', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Inter', sans-serif" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@700;800&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Syne:wght@700;800&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        .login-input { background: #111118; border: 1px solid #2A2A35; color: #E8E8F0; padding: 11px 14px; font-family: 'DM Mono', monospace; font-size: 13px; width: 100%; outline: none; transition: border-color 0.15s; }
+        .login-input { background: #111118; border: 1px solid #2A2A35; color: #E8E8F0; padding: 11px 14px; font-family: 'Inter', sans-serif; font-size: 14px; width: 100%; outline: none; transition: border-color 0.15s; }
         .login-input:focus { border-color: #2B3FE0; }
-        .login-btn { background: #2B3FE0; color: #fff; border: none; padding: 12px; font-family: 'DM Mono', monospace; font-size: 12px; font-weight: 500; cursor: pointer; letter-spacing: 0.1em; text-transform: uppercase; width: 100%; transition: opacity 0.15s; }
+        .login-btn { background: #2B3FE0; color: #fff; border: none; padding: 12px; font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer; letter-spacing: 0.06em; text-transform: uppercase; width: 100%; transition: opacity 0.15s; }
         .login-btn:hover { opacity: 0.85; }
         .login-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .text-link { background: none; border: none; color: #555; font-family: 'DM Mono', monospace; font-size: 11px; cursor: pointer; letter-spacing: 0.06em; text-decoration: underline; }
+        .text-link { background: none; border: none; color: #555; font-family: 'Inter', sans-serif; font-size: 12px; cursor: pointer; letter-spacing: 0.02em; text-decoration: underline; }
         .text-link:hover { color: #888; }
       `}</style>
 
@@ -59,25 +59,25 @@ export default function Login() {
         </div>
 
         {resetSent ? (
-          <div style={{ fontSize: 12, color: '#30D158', letterSpacing: '0.04em', lineHeight: 1.6 }}>
+          <div style={{ fontSize: 13, color: '#30D158', letterSpacing: '0.01em', lineHeight: 1.6 }}>
             Password reset email sent. Check your inbox and follow the link to reset your password.
           </div>
         ) : (
           <>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
               <div>
-                <div style={{ fontSize: 10, color: '#555', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>Email</div>
+                <div style={{ fontSize: 11, color: '#555', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>Email</div>
                 <input className="login-input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@butty.com" onKeyDown={e => e.key === 'Enter' && handleSubmit()} />
               </div>
               {mode !== 'reset' && (
                 <div>
-                  <div style={{ fontSize: 10, color: '#555', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>Password</div>
+                  <div style={{ fontSize: 11, color: '#555', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>Password</div>
                   <input className="login-input" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" onKeyDown={e => e.key === 'Enter' && handleSubmit()} />
                 </div>
               )}
             </div>
 
-            {error && <div style={{ fontSize: 11, color: error.includes('Check') ? '#30D158' : '#FF3B3B', marginBottom: 16, letterSpacing: '0.04em', lineHeight: 1.5 }}>{error}</div>}
+            {error && <div style={{ fontSize: 13, color: error.includes('Check') ? '#30D158' : '#FF3B3B', marginBottom: 16, letterSpacing: '0.01em', lineHeight: 1.5 }}>{error}</div>}
 
             <button className="login-btn" onClick={handleSubmit} disabled={loading}>
               {loading ? 'Please wait...' : mode === 'login' ? 'Sign In' : mode === 'signup' ? 'Create Account' : 'Send Reset Email'}

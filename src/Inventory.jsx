@@ -515,24 +515,24 @@ Purchasing Department`;
 
   // ── Styles ───────────────────────────────────────────────────────────────
   const css = `
-    @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Syne:wght@700;800&display=swap');
     *{box-sizing:border-box;margin:0;padding:0}
     ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#444;border-radius:3px}
     input,select{outline:none}
     .row-hover:hover{background:${t.rowHover}!important}
-    .btn-primary{background:${t.accent};color:#fff;border:none;padding:9px 20px;font-family:'DM Mono',monospace;font-size:12px;font-weight:500;cursor:pointer;letter-spacing:0.08em;text-transform:uppercase;transition:opacity 0.15s}
+    .btn-primary{background:${t.accent};color:#fff;border:none;padding:9px 20px;font-family:'Inter',sans-serif;font-size:13px;font-weight:500;cursor:pointer;letter-spacing:0.04em;text-transform:uppercase;transition:opacity 0.15s}
     .btn-primary:hover{opacity:0.85}
-    .btn-ghost{background:transparent;color:${t.textMid};border:1px solid ${t.borderStrong};padding:7px 14px;font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;letter-spacing:0.06em;transition:all 0.15s}
+    .btn-ghost{background:transparent;color:${t.textMid};border:1px solid ${t.borderStrong};padding:7px 14px;font-family:'Inter',sans-serif;font-size:12px;cursor:pointer;letter-spacing:0.02em;transition:all 0.15s}
     .btn-ghost:hover{border-color:${t.textDim};color:${t.text}}
-    .btn-danger{background:transparent;color:#FF3B3B;border:1px solid rgba(255,59,59,0.3);padding:5px 10px;font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;transition:all 0.15s}
+    .btn-danger{background:transparent;color:#FF3B3B;border:1px solid rgba(255,59,59,0.3);padding:5px 10px;font-family:'Inter',sans-serif;font-size:12px;cursor:pointer;transition:all 0.15s}
     .btn-danger:hover{background:rgba(255,59,59,0.1)}
-    .btn-success{background:rgba(48,209,88,0.15);color:#30D158;border:1px solid rgba(48,209,88,0.4);padding:7px 14px;font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;letter-spacing:0.06em;transition:all 0.15s}
+    .btn-success{background:rgba(48,209,88,0.15);color:#30D158;border:1px solid rgba(48,209,88,0.4);padding:7px 14px;font-family:'Inter',sans-serif;font-size:12px;cursor:pointer;letter-spacing:0.02em;transition:all 0.15s}
     .btn-success:hover{background:rgba(48,209,88,0.25)}
-    .chip{display:inline-flex;align-items:center;padding:3px 10px;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;cursor:pointer;border:1px solid transparent;transition:all 0.15s}
+    .chip{display:inline-flex;align-items:center;padding:3px 10px;font-size:11px;letter-spacing:0.04em;text-transform:uppercase;cursor:pointer;border:1px solid transparent;transition:all 0.15s}
     .chip.active{border-color:${t.text};color:${t.text}}
     .chip:not(.active){color:${t.textDim};border-color:${t.border}}
     .chip:not(.active):hover{border-color:${t.textMid};color:${t.textMid}}
-    .field-input{background:${t.inputBg};border:1px solid ${t.borderStrong};color:${t.text};padding:9px 12px;font-family:'DM Mono',monospace;font-size:12px;width:100%;transition:border-color 0.15s}
+    .field-input{background:${t.inputBg};border:1px solid ${t.borderStrong};color:${t.text};padding:9px 12px;font-family:'Inter',sans-serif;font-size:13px;width:100%;transition:border-color 0.15s}
     .field-input:focus{border-color:${t.accent}}
     .field-input::placeholder{color:${t.textDim}}
     .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px)}
@@ -540,13 +540,13 @@ Purchasing Department`;
     .sort-btn{background:none;border:none;color:inherit;cursor:pointer;font-family:inherit;font-size:inherit;display:flex;align-items:center;gap:4px;padding:0}
     .sort-btn:hover{color:${t.text}}
     .lightbox{position:fixed;inset:0;background:rgba(0,0,0,0.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:200;backdrop-filter:blur(8px);cursor:zoom-out}
-    .toast{position:fixed;bottom:28px;right:28px;padding:12px 20px;font-size:12px;letter-spacing:0.06em;z-index:300;border:1px solid;animation:fadeIn 0.2s ease}
+    .toast{position:fixed;bottom:28px;right:28px;padding:12px 20px;font-size:13px;letter-spacing:0.02em;z-index:300;border:1px solid;animation:fadeIn 0.2s ease}
     @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
     .stat-card{padding:20px 24px;cursor:pointer;transition:all 0.2s}
     .stat-card:hover{transform:translateY(-1px)}
     .machine-card{border:1px solid ${t.border};background:${t.cardBg};padding:24px;transition:border-color 0.2s}
     .machine-card:hover{border-color:${t.borderStrong}}
-    .tab-btn{padding:10px 24px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;cursor:pointer;border:none;transition:all 0.2s}
+    .tab-btn{padding:10px 24px;font-family:'Inter',sans-serif;font-size:12px;letter-spacing:0.06em;text-transform:uppercase;cursor:pointer;border:none;transition:all 0.2s}
     .tab-btn.active{background:${t.accent};color:#fff}
     .tab-btn:not(.active){background:transparent;color:${t.textDim};border-bottom:2px solid transparent}
     .tab-btn:not(.active):hover{color:${t.text}}
@@ -562,13 +562,13 @@ Purchasing Department`;
 
   // ── Render ─────────────────────────────────────────────────────────────────
   if (loading) return (
-    <div style={{ minHeight:'100vh', background:'#0A0A0F', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:"'DM Mono',monospace", color:'#555', fontSize:13, letterSpacing:'0.1em' }}>
+    <div style={{ minHeight:'100vh', background:'#0A0A0F', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:"'Inter',sans-serif", color:'#555', fontSize:13, letterSpacing:'0.1em' }}>
       Loading…
     </div>
   );
 
   return (
-    <div style={{ minHeight:"100vh", background:t.bg, color:t.text, fontFamily:"'DM Mono','Fira Mono',monospace", transition:"background 0.3s,color 0.3s" }}>
+    <div style={{ minHeight:"100vh", background:t.bg, color:t.text, fontFamily:"'Inter',sans-serif", transition:"background 0.3s,color 0.3s" }}>
       <style>{css}</style>
 
       {/* ── Header ── */}
@@ -583,10 +583,10 @@ Purchasing Department`;
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
           {user && <div style={{ fontSize:10, color:t.textDim, letterSpacing:"0.06em", maxWidth:160, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{user.email}</div>}
-          <button onClick={onSignOut} style={{ background:"transparent", color:t.textDim, border:`1px solid ${t.borderStrong}`, padding:"7px 14px", fontFamily:"'DM Mono',monospace", fontSize:11, cursor:"pointer", letterSpacing:"0.06em", transition:"all 0.15s" }}>
+          <button onClick={onSignOut} style={{ background:"transparent", color:t.textDim, border:`1px solid ${t.borderStrong}`, padding:"7px 14px", fontFamily:"'Inter',sans-serif", fontSize:11, cursor:"pointer", letterSpacing:"0.06em", transition:"all 0.15s" }}>
             Sign Out
           </button>
-          <button onClick={()=>setSettingsOpen(o=>!o)} style={{ background:settingsOpen?t.accent:"transparent", color:settingsOpen?"#fff":t.textMid, border:`1px solid ${settingsOpen?t.accent:t.borderStrong}`, padding:"7px 14px", fontFamily:"'DM Mono',monospace", fontSize:11, cursor:"pointer", letterSpacing:"0.06em", transition:"all 0.15s" }}>
+          <button onClick={()=>setSettingsOpen(o=>!o)} style={{ background:settingsOpen?t.accent:"transparent", color:settingsOpen?"#fff":t.textMid, border:`1px solid ${settingsOpen?t.accent:t.borderStrong}`, padding:"7px 14px", fontFamily:"'Inter',sans-serif", fontSize:11, cursor:"pointer", letterSpacing:"0.06em", transition:"all 0.15s" }}>
             ⚙ Settings
           </button>
           {activeTab==="inventory" && <button className="btn-primary" onClick={openAdd}>+ Add Product</button>}
@@ -595,7 +595,7 @@ Purchasing Department`;
           {(activeTab==="inventory"||activeTab==="suppliers") && (() => {
             const lowCount = products.filter(p => ["out","low"].includes(getStockStatus(p.stock, p.minStock))).length;
             return lowCount > 0 ? (
-              <button onClick={generateAllLowStockEmails} style={{ background:"rgba(255,149,0,0.15)", color:"#FF9500", border:"1px solid rgba(255,149,0,0.4)", padding:"7px 14px", fontFamily:"'DM Mono',monospace", fontSize:11, cursor:"pointer", letterSpacing:"0.06em", display:"flex", alignItems:"center", gap:6 }}>
+              <button onClick={generateAllLowStockEmails} style={{ background:"rgba(255,149,0,0.15)", color:"#FF9500", border:"1px solid rgba(255,149,0,0.4)", padding:"7px 14px", fontFamily:"'Inter',sans-serif", fontSize:11, cursor:"pointer", letterSpacing:"0.06em", display:"flex", alignItems:"center", gap:6 }}>
                 ✉ Reorder ({lowCount})
               </button>
             ) : null;
@@ -690,7 +690,7 @@ Purchasing Department`;
 
           {/* Table */}
           <div style={{ border:`1px solid ${t.border}`, overflow:"hidden" }}>
-            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
               <thead>
                 <tr style={{ borderBottom:`1px solid ${t.border}`, background:t.cardBg }}>
                   {[{label:"Photo",field:null},{label:"SKU",field:"sku"},{label:"Product Name",field:"name"},{label:"Category",field:"category"},{label:"Location",field:"location"},{label:"Stock",field:"stock"},{label:"Min Level",field:"minStock"},{label:"Status",field:null},{label:"Actions",field:null}].map(col=>(
@@ -906,7 +906,7 @@ Purchasing Department`;
                     <div style={{ fontSize:11, color:t.textDim }}>{low.map(p=>p.name).join(" · ")}</div>
                   </div>
                 </div>
-                <button onClick={generateAllLowStockEmails} style={{ background:"#FF9500", color:"#000", border:"none", padding:"9px 18px", fontFamily:"'DM Mono',monospace", fontSize:11, fontWeight:600, cursor:"pointer", letterSpacing:"0.08em", textTransform:"uppercase" }}>
+                <button onClick={generateAllLowStockEmails} style={{ background:"#FF9500", color:"#000", border:"none", padding:"9px 18px", fontFamily:"'Inter',sans-serif", fontSize:11, fontWeight:600, cursor:"pointer", letterSpacing:"0.08em", textTransform:"uppercase" }}>
                   ✉ Generate Reorder Emails
                 </button>
               </div>
@@ -1040,7 +1040,7 @@ Purchasing Department`;
                 <textarea
                   value={emailDraft.body}
                   onChange={e=>setEmailDraft(d=>({...d, body:e.target.value}))}
-                  style={{ background:t.inputBg, border:`1px solid ${t.borderStrong}`, color:t.text, padding:"12px", fontFamily:"'DM Mono',monospace", fontSize:11, width:"100%", height:180, resize:"vertical", outline:"none", lineHeight:1.6 }}
+                  style={{ background:t.inputBg, border:`1px solid ${t.borderStrong}`, color:t.text, padding:"12px", fontFamily:"'Inter',sans-serif", fontSize:11, width:"100%", height:180, resize:"vertical", outline:"none", lineHeight:1.6 }}
                 />
               </div>
 
@@ -1218,7 +1218,7 @@ Purchasing Department`;
                   <div style={{ display:"flex", marginBottom:18, border:`1px solid ${t.borderStrong}`, overflow:"hidden", width:"100%" }}>
                     {[["purchased","🛒  Purchased from Supplier"],["made","⚙  Made In-House from Raw Material"]].map(([val,label])=>(
                       <button key={val} onClick={()=>setForm(f=>({...f, partType:val}))} style={{
-                        flex:1, padding:"10px 0", fontFamily:"'DM Mono',monospace", fontSize:10, letterSpacing:"0.07em",
+                        flex:1, padding:"10px 0", fontFamily:"'Inter',sans-serif", fontSize:10, letterSpacing:"0.07em",
                         border:"none", cursor:"pointer", transition:"all 0.2s",
                         background: form.partType===val ? t.accent : t.inputBg,
                         color: form.partType===val ? "#fff" : t.textDim,
@@ -1238,7 +1238,7 @@ Purchasing Department`;
                       ) : (
                         <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
                           <button onClick={()=>setForm(f=>({...f,supplierId:null}))} style={{
-                            padding:"7px 12px", fontFamily:"'DM Mono',monospace", fontSize:10, textAlign:"left",
+                            padding:"7px 12px", fontFamily:"'Inter',sans-serif", fontSize:10, textAlign:"left",
                             border:`1px solid ${form.supplierId===null ? t.accent : t.border}`,
                             background: form.supplierId===null ? `rgba(${t.accentRgb},0.12)` : t.inputBg,
                             color: form.supplierId===null ? t.text : t.textDim, cursor:"pointer",
@@ -1378,7 +1378,7 @@ Purchasing Department`;
                           ) : (
                             <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
                               <button onClick={()=>setForm(f=>({...f,supplierId:null}))} style={{
-                                padding:"7px 12px", fontFamily:"'DM Mono',monospace", fontSize:10, textAlign:"left",
+                                padding:"7px 12px", fontFamily:"'Inter',sans-serif", fontSize:10, textAlign:"left",
                                 border:`1px solid ${form.supplierId===null ? t.accent : t.border}`,
                                 background: form.supplierId===null ? `rgba(${t.accentRgb},0.12)` : t.inputBg,
                                 color: form.supplierId===null ? t.text : t.textDim, cursor:"pointer",
@@ -1537,7 +1537,7 @@ Purchasing Department`;
                   <button className="btn-ghost" style={{ fontSize:10 }} onClick={()=>{ setMachineModal(null); setTimeout(()=>openEditMachine(m),50); }}>✎ Edit BOM</button>
                 </div>
 
-                <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+                <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
                   <thead>
                     <tr style={{ borderBottom:`1px solid ${t.border}` }}>
                       {["Part","SKU","Location","Stock","Qty / Build","Builds Possible","Status"].map(h=>(
