@@ -573,7 +573,7 @@ Purchasing Department`;
       {/* ── Header ── */}
       <div style={{ borderBottom:`1px solid ${t.border}`, padding:"0 40px", display:"flex", alignItems:"center", justifyContent:"space-between", background:t.headerBg, minHeight:72, position:"relative" }}>
         <div style={{ display:"flex", alignItems:"center", gap:18 }}>
-          <img src={LOGO} alt="Butty" style={{ height:40, width:"auto", maxWidth:120, objectFit:"contain" }} />
+          <img src={`data:image/jpeg;base64,${LOGO}`} alt="Butty" style={{ height:40, width:"auto", maxWidth:120, objectFit:"contain" }} />
           <div style={{ width:1, height:36, background:t.borderStrong }} />
           <div>
             <div style={{ fontFamily:"'Syne',sans-serif", fontSize:13, fontWeight:700, letterSpacing:"0.12em", color:t.text, textTransform:"uppercase" }}>Butty Manufacturing</div>
