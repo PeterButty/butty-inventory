@@ -46,7 +46,7 @@ export default function Login() {
       <div style={{ width: 380, padding: 40, background: '#0F0F18', border: '1px solid #1E1E28' }}>
         {/* Logo */}
         <div style={{ marginBottom: 36 }}>
-          <img src={LOGO} alt="Butty" style={{ height: 48, width: 'auto', maxWidth: '100%', objectFit: 'contain', display: 'block' }} />
+          <img src={`data:image/jpeg;base64,${LOGO}`} alt="Butty" style={{ height: 48, width: 'auto', maxWidth: '100%', objectFit: 'contain', display: 'block' }} />
           <div style={{ fontSize: 9, color: '#444', letterSpacing: '0.12em', marginTop: 8 }}>INVENTORY SYSTEM</div>
         </div>
 
