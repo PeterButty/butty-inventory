@@ -1,7 +1,9 @@
+import { useMemo } from 'react'
 import { useApp } from '../AppContext'
 import { Modal, ModalTitle, FieldLabel, SectionLabel, EmptyState, PhotoField } from '../components/common'
 import SupplierPicker from '../components/SupplierPicker'
 import LineItemRows from '../components/LineItemRows'
+import { partsCausingLoop } from '../lib/builds'
 
 const BASIC_FIELDS = [
   { label:'SKU',             key:'sku'                      },
@@ -137,6 +139,10 @@ function ProductForm({ mode, form, setForm, onSave, onClose }) {
 
   const reorderQty = parseFloat(form.reorderQty) || 0
 
+  // Anything that would make this assembly contain itself, directly or through
+  // another assembly, is kept out of the component picker.
+  const loopingParts = useMemo(() => partsCausingLoop(form.id, products), [form.id, products])
+
   return (
     <>
       <div style={{ fontFamily:"'Syne',sans-serif", fontSize:16, fontWeight:700, marginBottom:24, color:t.text }}>
@@ -230,7 +236,7 @@ function ProductForm({ mode, form, setForm, onSave, onClose }) {
               placeholder="— Select part —"
               emptyMessage='No components defined yet. Click "+ Add Component" above.'
               options={products
-                .filter(p => p.id !== form.id && p.partType !== 'subassembly')
+                .filter(p => !loopingParts.has(p.id))
                 .map(p => ({ value:p.id, label:`${p.name} (${p.sku}) — ${p.stock} in stock` }))}
             />
 

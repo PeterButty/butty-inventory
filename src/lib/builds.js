@@ -38,3 +38,27 @@ export function calcMachineBuilds(machine, products) {
 export function buildBarScale(componentDetails) {
   return Math.max(1, ...componentDetails.map(c => c.canBuild));
 }
+
+// Which parts must not be offered as components of `productId`, because using
+// them would create a loop: the part itself, plus anything that already
+// contains it at any depth.
+//
+// The component picker used to exclude every subassembly outright, which did
+// stop loops but also meant a subassembly built from other subassemblies
+// showed blank rows and could not be edited. This excludes only what actually
+// would loop.
+export function partsCausingLoop(productId, products) {
+  const blocked = new Set([productId]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const p of products) {
+      if (blocked.has(p.id)) continue;
+      if ((p.bomComponents || []).some(c => blocked.has(c.productId))) {
+        blocked.add(p.id);
+        grew = true;
+      }
+    }
+  }
+  return blocked;
+}

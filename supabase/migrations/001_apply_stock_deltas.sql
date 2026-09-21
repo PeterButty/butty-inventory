@@ -17,10 +17,19 @@
 -- This function applies every movement inside a single database transaction
 -- using `stock = stock + delta`, so either all of them land or none do, and
 -- concurrent changes add up instead of overwriting.
+--
+-- Note: returns void deliberately. An earlier draft declared
+-- RETURNS TABLE (id uuid, stock integer), whose output parameter `stock`
+-- collided with the products.stock column and made every call fail with
+-- "column reference stock is ambiguous" (SQLSTATE 42702). Nothing used the
+-- returned rows, so they are gone.
 -- ══════════════════════════════════════════════════════════════════════════════
 
-CREATE OR REPLACE FUNCTION apply_stock_deltas(p_deltas jsonb)
-RETURNS TABLE (id uuid, stock integer)
+-- The return type changed, and CREATE OR REPLACE cannot do that, so drop first.
+DROP FUNCTION IF EXISTS apply_stock_deltas(jsonb);
+
+CREATE FUNCTION apply_stock_deltas(p_deltas jsonb)
+RETURNS void
 LANGUAGE plpgsql
 SECURITY INVOKER
 SET search_path = public
@@ -44,7 +53,7 @@ BEGIN
     -- Locks the row for the rest of the transaction, so simultaneous
     -- movements queue up instead of overwriting one another.
     UPDATE products
-       SET stock = stock + v_delta
+       SET stock = products.stock + v_delta
      WHERE products.id = v_id
     RETURNING products.stock, products.name
       INTO v_new_stock, v_name;
@@ -58,10 +67,6 @@ BEGIN
       RAISE EXCEPTION 'Not enough % in stock — short by %', v_name, abs(v_new_stock)
         USING ERRCODE = 'check_violation';
     END IF;
-
-    id    := v_id;
-    stock := v_new_stock;
-    RETURN NEXT;
   END LOOP;
 END;
 $$;
