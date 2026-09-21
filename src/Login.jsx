@@ -8,7 +8,7 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [mode, setMode] = useState('login') // 'login' | 'signup' | 'reset'
+  const [mode, setMode] = useState('login') // 'login' | 'reset'
   const [resetSent, setResetSent] = useState(false)
 
   async function handleSubmit() {
@@ -17,10 +17,6 @@ export default function Login() {
     if (mode === 'login') {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) setError(error.message)
-    } else if (mode === 'signup') {
-      const { error } = await supabase.auth.signUp({ email, password })
-      if (error) setError(error.message)
-      else setError('Check your email to confirm your account.')
     } else if (mode === 'reset') {
       const { error } = await supabase.auth.resetPasswordForEmail(email)
       if (error) setError(error.message)
@@ -80,20 +76,16 @@ export default function Login() {
             {error && <div style={{ fontSize: 11, color: error.includes('Check') ? '#30D158' : '#FF3B3B', marginBottom: 16, letterSpacing: '0.04em', lineHeight: 1.5 }}>{error}</div>}
 
             <button className="login-btn" onClick={handleSubmit} disabled={loading}>
-              {loading ? 'Please wait...' : mode === 'login' ? 'Sign In' : mode === 'signup' ? 'Create Account' : 'Send Reset Email'}
+              {loading ? 'Please wait...' : mode === 'login' ? 'Sign In' : 'Send Reset Email'}
             </button>
           </>
         )}
 
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 20 }}>
-          {mode === 'login' ? (
-            <>
-              <button className="text-link" onClick={() => setMode('reset')}>Forgot password?</button>
-              <button className="text-link" onClick={() => setMode('signup')}>Create account</button>
-            </>
-          ) : (
-            <button className="text-link" onClick={() => { setMode('login'); setResetSent(false); }}>← Back to sign in</button>
-          )}
+          {mode === 'login'
+            ? <button className="text-link" onClick={() => setMode('reset')}>Forgot password?</button>
+            : <button className="text-link" onClick={() => { setMode('login'); setResetSent(false); }}>← Back to sign in</button>
+          }
         </div>
       </div>
     </div>
