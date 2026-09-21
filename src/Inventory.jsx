@@ -23,6 +23,19 @@ function getStockStatus(stock, minStock) {
   return 'ok';
 }
 
+// Compares two table cells for sorting. Cells are routinely blank (imported
+// parts have no location yet), so nothing here assumes a value is present.
+// Numbers compare numerically; everything else compares as text with natural
+// number ordering, so S15-03-2 sorts before S15-03-10.
+function compareCells(av, bv) {
+  if (typeof av === 'number' && typeof bv === 'number') return av - bv;
+  return String(av).localeCompare(String(bv), undefined, { numeric: true, sensitivity: 'base' });
+}
+
+function isBlankCell(v) {
+  return v === null || v === undefined || v === '';
+}
+
 const STATUS_META = {
   out:     { label:'Out of Stock', color:'#FF3B3B', bg:'rgba(255,59,59,0.12)',  dot:'#FF3B3B' },
   low:     { label:'Low Stock',    color:'#FF9500', bg:'rgba(255,149,0,0.12)',  dot:'#FF9500' },
@@ -230,6 +243,38 @@ export default function Inventory({ user, onSignOut }) {
     setTimeout(() => setToast(null), 3200);
   }
 
+  // ── Stock movements ───────────────────────────────────────────────────────
+  // Every stock change goes through the database's apply_stock_deltas function,
+  // which applies the whole list in one transaction. Either all the movements
+  // land or none do, so a build can never half-deduct, and because the database
+  // adds the delta to whatever the current count is, two people working at the
+  // same time add up instead of overwriting each other.
+  // Returns an error to report, or null on success.
+  async function applyStockDeltas(deltas) {
+    const { error } = await supabase.rpc('apply_stock_deltas', { p_deltas: deltas });
+    if (!error) return null;
+    if (error.code === 'PGRST202' || error.code === '42883') {
+      return { message: 'the stock update function is missing from the database — run migration 001_apply_stock_deltas.sql' };
+    }
+    return error;
+  }
+
+  // ── Join-table helpers ────────────────────────────────────────────────────
+  // Postgres 42P01 = table does not exist, i.e. a migration has not been run.
+  function isMissingTable(error) {
+    return error?.code === '42P01';
+  }
+
+  // Replaces the link rows for one owner record. Returns an error to report,
+  // or null. A missing table is treated as "nothing to do" rather than a fault.
+  async function replaceLinks(table, ownerColumn, ownerId, rows) {
+    const del = await supabase.from(table).delete().eq(ownerColumn, ownerId);
+    if (del.error) return isMissingTable(del.error) ? null : del.error;
+    if (rows.length === 0) return null;
+    const ins = await supabase.from(table).insert(rows);
+    return ins.error || null;
+  }
+
   // ── Supplier / email helpers ──────────────────────────────────────────────
   function getSupplierForProduct(productId) {
     return suppliers.find(s => s.products && s.products.includes(productId)) || null;
@@ -352,16 +397,11 @@ Purchasing Department`;
       if (error) { showToast('Save failed: ' + error.message, 'error'); setSaving(false); return; }
       supplierId = supplierForm.id;
     }
-    // Sync supplier_products
-    try {
-      await supabase.from('supplier_products').delete().eq('supplier_id', supplierId);
-      const linked = supplierForm.products || [];
-      if (linked.length > 0) {
-        await supabase.from('supplier_products').insert(linked.map(pid => ({ supplier_id: supplierId, product_id: pid })));
-      }
-    } catch(e) { /* migration not yet run */ }
+    const linkErr = await replaceLinks('supplier_products', 'supplier_id', supplierId,
+      (supplierForm.products || []).map(pid => ({ supplier_id: supplierId, product_id: pid })));
 
-    showToast(supplierModal.mode === 'add' ? 'Supplier added!' : 'Supplier updated!');
+    if (linkErr) showToast(`Supplier saved, but the supplied parts did not save (${linkErr.message}).`, 'error');
+    else showToast(supplierModal.mode === 'add' ? 'Supplier added!' : 'Supplier updated!');
     await loadAll();
     setSaving(false);
     setSupplierProductSearch('');
@@ -396,10 +436,13 @@ Purchasing Department`;
       const matchStatus = filterStatus === 'All' || status === filterStatus;
       return matchSearch && matchCat && matchStatus;
     });
-    return [...list].sort((a,b) => {
-      let av=a[sortBy], bv=b[sortBy];
-      if (typeof av === 'string') av=av.toLowerCase(), bv=bv.toLowerCase();
-      return sortDir==='asc' ? (av>bv?1:-1) : (av<bv?1:-1);
+    const dir = sortDir === 'asc' ? 1 : -1;
+    return [...list].sort((a, b) => {
+      const av = a[sortBy], bv = b[sortBy];
+      // Blanks always sink to the bottom, whichever way the column is sorted.
+      const aBlank = isBlankCell(av), bBlank = isBlankCell(bv);
+      if (aBlank || bBlank) return aBlank && bBlank ? 0 : aBlank ? 1 : -1;
+      return dir * compareCells(av, bv);
     });
   }, [products, search, category, filterStatus, sortBy, sortDir]);
 
@@ -437,26 +480,23 @@ Purchasing Department`;
     const { error: pErr } = await supabase.from('products').upsert(payload);
     if (pErr) { showToast('Save failed: ' + pErr.message, 'error'); setSaving(false); return; }
 
-    // Sync supplier_products (silently skip if table doesn't exist yet)
-    try {
-      await supabase.from('supplier_products').delete().eq('product_id', id);
-      if (form.supplierId) {
-        await supabase.from('supplier_products').insert({ supplier_id:form.supplierId, product_id:id });
-      }
-    } catch(e) { /* migration not yet run */ }
+    // Supplier link and machine usage are stored in their own tables. If either
+    // fails to save, say so rather than reporting a clean save.
+    const warnings = [];
 
-    // Sync machine_components from machineLinks (silently skip if table doesn't exist yet)
-    try {
-      await supabase.from('machine_components').delete().eq('product_id', id);
-      const links = form.machineLinks || [];
-      if (links.length > 0) {
-        await supabase.from('machine_components').insert(
-          links.map(l => ({ machine_id:l.machineId, product_id:id, qty:l.qty, note:l.note||'' }))
-        );
-      }
-    } catch(e) { /* migration not yet run */ }
+    const supErr = await replaceLinks('supplier_products', 'product_id', id,
+      form.supplierId ? [{ supplier_id:form.supplierId, product_id:id }] : []);
+    if (supErr) warnings.push(`supplier link (${supErr.message})`);
 
-    showToast(modal.mode === 'add' ? 'Product added!' : 'Product updated!');
+    // Rows with no machine chosen would be rejected by the database, so drop them.
+    const machErr = await replaceLinks('machine_components', 'product_id', id,
+      (form.machineLinks || [])
+        .filter(l => l.machineId)
+        .map(l => ({ machine_id:l.machineId, product_id:id, qty:l.qty, note:l.note||'' })));
+    if (machErr) warnings.push(`machine usage (${machErr.message})`);
+
+    if (warnings.length) showToast(`Part saved, but ${warnings.join(' and ')} did not save.`, 'error');
+    else showToast(modal.mode === 'add' ? 'Product added!' : 'Product updated!');
     await loadAll();
     setSaving(false);
     closeModal();
@@ -467,12 +507,14 @@ Purchasing Department`;
     if (isNaN(qty) || qty < 0) return;
     setSaving(true);
     const p = modal.product;
-    const newStock = adjustType === 'add' ? p.stock + qty : Math.max(0, p.stock - qty);
-    const { error } = await supabase.from('products').update({ stock:newStock }).eq('id', p.id);
-    if (error) showToast('Update failed: ' + error.message, 'error');
-    else { showToast('Stock updated!'); await loadAll(); }
+    const error = await applyStockDeltas([
+      { product_id: p.id, delta: adjustType === 'add' ? qty : -qty },
+    ]);
+    if (error) showToast('Update failed — ' + error.message, 'error');
+    else showToast('Stock updated!');
+    await loadAll();
     setSaving(false);
-    closeModal();
+    if (!error) closeModal();
   }
 
   async function buildAssembly() {
@@ -480,44 +522,29 @@ Purchasing Department`;
     const qty = parseInt(buildAssemblyQty);
     if (!product || isNaN(qty) || qty < 1) return;
     const bom = product.bomComponents || [];
-    // Validate all components have enough stock
+    if (bom.length === 0) return;
+    // Quick check against what's on screen so the common case gives a helpful
+    // message. The database enforces it properly either way.
     for (const comp of bom) {
       const compProd = products.find(p => p.id === comp.productId);
-      if (!compProd) { showToast(`Component not found in inventory.`, 'error'); return; }
+      if (!compProd) { showToast('Component not found in inventory.', 'error'); return; }
       if (compProd.stock < comp.qty * qty) {
         showToast(`Not enough ${compProd.name} — need ${comp.qty * qty}, have ${compProd.stock}.`, 'error');
         return;
       }
     }
     setSaving(true);
-    // Deduct each component — bail on first failure to avoid partial deduction
-    for (const comp of bom) {
-      const compProd = products.find(p => p.id === comp.productId);
-      const { error } = await supabase
-        .from('products')
-        .update({ stock: compProd.stock - (comp.qty * qty) })
-        .eq('id', compProd.id);
-      if (error) {
-        showToast(`Failed to deduct ${compProd.name} — no stock was changed. Please try again.`, 'error');
-        setSaving(false);
-        await loadAll(); // re-sync to known-good state
-        return;
-      }
-    }
-    // All components deducted successfully — increment assembly stock
-    const { error: assemblyError } = await supabase
-      .from('products')
-      .update({ stock: product.stock + qty })
-      .eq('id', product.id);
-    if (assemblyError) {
-      showToast(`Components deducted but failed to increment ${product.name} stock. Please adjust manually.`, 'error');
-    } else {
-      showToast(`Built ${qty}× ${product.name} — components deducted.`);
-    }
+    // Components out and finished assemblies in, in one transaction — a
+    // shortfall on any component leaves every count untouched.
+    const error = await applyStockDeltas([
+      ...bom.map(comp => ({ product_id: comp.productId, delta: -(comp.qty * qty) })),
+      { product_id: product.id, delta: qty },
+    ]);
+    if (error) showToast(`Nothing was changed — ${error.message}`, 'error');
+    else showToast(`Built ${qty}× ${product.name} — components deducted.`);
     await loadAll();
     setSaving(false);
-    setBuildAssemblyModal(null);
-    setBuildAssemblyQty(1);
+    if (!error) { setBuildAssemblyModal(null); setBuildAssemblyQty(1); }
   }
 
   async function deleteProduct(id) {
@@ -567,33 +594,37 @@ Purchasing Department`;
   async function saveMachine() {
     if (!machineForm.name) return;
     setSaving(true);
-    let imageUrl = machineForm.imageUrl || null;
+    // Create or find the machine first, so a new machine's photo can be stored
+    // under its real id instead of a throwaway one.
     let machineId;
-    if (machineForm._imageFile) {
-      const ext = machineForm._imageFile.name.split('.').pop();
-      const tmpId = machineModal.mode === 'add' ? crypto.randomUUID() : machineModal.machine.id;
-      imageUrl = await uploadImage('machine-images', `${tmpId}.${ext}`, machineForm._imageFile);
-      machineId = tmpId;
-    }
-    const payload = { name:machineForm.name, description:machineForm.description||'', image_url:imageUrl };
     if (machineModal.mode === 'add') {
-      const { data, error } = await supabase.from('machines').insert(payload).select().single();
+      const { data, error } = await supabase.from('machines')
+        .insert({ name:machineForm.name, description:machineForm.description||'' })
+        .select().single();
       if (error) { showToast('Save failed: ' + error.message, 'error'); setSaving(false); return; }
       machineId = data.id;
     } else {
       machineId = machineModal.machine.id;
-      const { error } = await supabase.from('machines').update(payload).eq('id', machineId);
-      if (error) { showToast('Save failed: ' + error.message, 'error'); setSaving(false); return; }
     }
-    // Sync components
-    await supabase.from('machine_components').delete().eq('machine_id', machineId);
-    const comps = machineForm.components.filter(c => c.productId);
-    if (comps.length > 0) {
-      await supabase.from('machine_components').insert(
-        comps.map(c => ({ machine_id:machineId, product_id:c.productId, qty:c.qty, note:c.note||'' }))
-      );
+
+    let imageUrl = machineForm.imageUrl || null;
+    if (machineForm._imageFile) {
+      const ext = machineForm._imageFile.name.split('.').pop();
+      imageUrl = await uploadImage('machine-images', `${machineId}.${ext}`, machineForm._imageFile);
     }
-    showToast(machineModal.mode === 'add' ? 'Machine added!' : 'Machine updated!');
+
+    const { error: upErr } = await supabase.from('machines')
+      .update({ name:machineForm.name, description:machineForm.description||'', image_url:imageUrl })
+      .eq('id', machineId);
+    if (upErr) { showToast('Save failed: ' + upErr.message, 'error'); setSaving(false); return; }
+
+    const compErr = await replaceLinks('machine_components', 'machine_id', machineId,
+      machineForm.components
+        .filter(c => c.productId)
+        .map(c => ({ machine_id:machineId, product_id:c.productId, qty:c.qty, note:c.note||'' })));
+
+    if (compErr) showToast(`Machine saved, but the parts list did not save (${compErr.message}).`, 'error');
+    else showToast(machineModal.mode === 'add' ? 'Machine added!' : 'Machine updated!');
     await loadAll();
     setSaving(false);
     setMachineModal(null);
@@ -616,25 +647,15 @@ Purchasing Department`;
     const { max, componentDetails } = calcMachineBuilds(machine, products);
     if (qty > max) { showToast(`Cannot build ${qty} — only ${max} possible.`, 'error'); return; }
     setSaving(true);
-    // Deduct each component — bail on first failure to avoid partial deduction
-    for (const c of componentDetails) {
-      const newStock = c.prod.stock - (c.qty * qty);
-      const { error } = await supabase
-        .from('products')
-        .update({ stock: newStock })
-        .eq('id', c.productId);
-      if (error) {
-        showToast(`Failed to deduct ${c.prod.name} — no stock was changed. Please try again.`, 'error');
-        setSaving(false);
-        await loadAll(); // re-sync to known-good state
-        return;
-      }
-    }
-    showToast(`✓ ${qty}× ${machine.name} committed — stock deducted.`);
+    // Every component in one transaction — a build can never half-deduct.
+    const error = await applyStockDeltas(
+      componentDetails.map(c => ({ product_id: c.productId, delta: -(c.qty * qty) }))
+    );
+    if (error) showToast(`Nothing was changed — ${error.message}`, 'error');
+    else showToast(`✓ ${qty}× ${machine.name} committed — stock deducted.`);
     await loadAll();
     setSaving(false);
-    setConfirmCommit(null);
-    setMachineModal(null);
+    if (!error) { setConfirmCommit(null); setMachineModal(null); }
   }
 
   const alerts = products.filter(p => ['out','low'].includes(getStockStatus(p.stock, p.minStock)));
