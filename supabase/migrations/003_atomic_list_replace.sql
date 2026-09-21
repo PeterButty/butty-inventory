@@ -36,7 +36,9 @@ SECURITY INVOKER
 SET search_path = public
 AS $$
 BEGIN
-  DELETE FROM material_requirements;
+  -- WHERE true is required: Supabase loads pg_safeupdate for the API roles,
+  -- which refuses an unqualified DELETE even inside a function.
+  DELETE FROM material_requirements WHERE true;
 
   INSERT INTO material_requirements (name, total_ft, category_id, sort_order)
   SELECT row_data->>'name',
