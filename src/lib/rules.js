@@ -1,7 +1,6 @@
 // Automated purchasing rules.
 
 import { getStockStatus } from './stock';
-import { STEEL_PLATE_RULE } from './materials';
 
 // Steel plate is ordered as a group: when any monitored part drops to a few
 // machines' worth of stock, every plate size goes on the same order.
@@ -9,16 +8,20 @@ import { STEEL_PLATE_RULE } from './materials';
 // For each part matching the SKU prefix and made from plate, works out how
 // many are consumed by one set of every machine that uses it, and compares
 // stock against that many machine sets.
-export function evaluateSteelPlateRule(products, machines, suppliers, rule = STEEL_PLATE_RULE) {
-  const prefix = rule.skuPrefix.toUpperCase();
+//
+// The rule comes from the database, so the prefix, the trigger level and the
+// supplier are all editable without touching code. The supplier is held by id
+// rather than matched on the spelling of its name.
+export function evaluateSteelPlateRule(products, machines, suppliers, rule) {
+  const prefix = (rule.skuPrefix || '').toUpperCase();
 
-  const monitored = products.filter(p =>
+  const monitored = prefix ? products.filter(p =>
     p.sku?.toUpperCase().startsWith(prefix) &&
     (p.rawMaterials || []).some(rm =>
       (rm.type     || '').toLowerCase().includes('plate') ||
       (rm.material || '').toLowerCase().includes('plate')
     )
-  );
+  ) : [];
 
   const parts = monitored.map(p => {
     const qtyPerMachineSet = machines.reduce((total, m) => {
@@ -35,9 +38,14 @@ export function evaluateSteelPlateRule(products, machines, suppliers, rule = STE
     };
   });
 
-  const supplier = suppliers.find(s =>
-    s.name?.toLowerCase().includes(rule.supplierMatch)
-  ) || null;
+  // Matched by id. Before migration 002 there is no id to match on, so the old
+  // name match stands in, which keeps the rule working until it has been run.
+  const supplier =
+    suppliers.find(s => s.id === rule.supplierId) ||
+    (rule.supplierId == null && rule.supplierMatch
+      ? suppliers.find(s => s.name?.toLowerCase().includes(rule.supplierMatch)) || null
+      : null);
+  const triggered = rule.enabled !== false && parts.some(p => p.triggered);
 
-  return { triggered: parts.some(p => p.triggered), parts, supplier, rule };
+  return { triggered, parts, supplier, rule };
 }

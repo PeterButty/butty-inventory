@@ -4,7 +4,7 @@ import { THEMES, DEFAULT_THEME, buildCss } from './lib/theme'
 import { needsReorder, lowStockProducts } from './lib/stock'
 import { calcMachineBuilds } from './lib/builds'
 import { evaluateSteelPlateRule } from './lib/rules'
-import { STEEL_PLATE_ORDER } from './lib/materials'
+import { DEFAULT_PURCHASING } from './lib/materials'
 import {
   generateEmailDraft, generateSteelPlateDraft, groupLowStockBySupplier,
   emailToClipboardText, mailtoUrl,
@@ -22,6 +22,7 @@ import MachineDetailModal from './modals/MachineDetailModal'
 import SupplierModal from './modals/SupplierModal'
 import EmailDraftModal from './modals/EmailDraftModal'
 import { CommitBuildModal, BuildAssemblyModal, Lightbox } from './modals/BuildModals'
+import { RuleModal, PlateOrderModal, MaterialsModal } from './modals/PurchasingModals'
 
 const LOGO = '/butty-logo.jpg' // served from public/
 
@@ -84,6 +85,12 @@ export default function Inventory({ user, onSignOut }) {
   const [assemblyTarget, setAssemblyTarget] = useState(null)
   const [assemblyQty,    setAssemblyQty]    = useState(1)
 
+  // Purchasing rules: the plate quantities, trigger level, material list and
+  // run size. Loaded from the database, falling back to the built-in defaults
+  // when migration 002 has not been run.
+  const [purchasing,      setPurchasing]      = useState(DEFAULT_PURCHASING)
+  const [purchasingModal, setPurchasingModal] = useState(null)
+
   const t = THEMES[themeName]
 
   useEffect(() => { reload({ initial: true }) }, [])
@@ -97,11 +104,15 @@ export default function Inventory({ user, onSignOut }) {
   // Only the first load does that now; later refreshes swap the data in place.
   async function reload({ initial = false } = {}) {
     if (initial) setLoading(true)
-    const { products, machines, suppliers, error } = await db.loadEverything()
-    if (error) showToast('Error loading products: ' + error.message, 'error')
-    setProducts(products)
-    setMachines(machines)
-    setSuppliers(suppliers)
+    const [records, rules] = await Promise.all([
+      db.loadEverything(),
+      db.loadPurchasing(DEFAULT_PURCHASING),
+    ])
+    if (records.error) showToast('Error loading products: ' + records.error.message, 'error')
+    setProducts(records.products)
+    setMachines(records.machines)
+    setSuppliers(records.suppliers)
+    setPurchasing(rules)
     if (initial) setLoading(false)
   }
 
@@ -110,11 +121,9 @@ export default function Inventory({ user, onSignOut }) {
   }
 
   const steelPlateRule = useMemo(
-    () => evaluateSteelPlateRule(products, machines, suppliers),
-    [products, machines, suppliers]
+    () => evaluateSteelPlateRule(products, machines, suppliers, purchasing.rule),
+    [products, machines, suppliers, purchasing.rule]
   )
-  // The rule card shows the fixed order alongside the parts it monitors.
-  const steelPlateRuleView = { ...steelPlateRule, order: STEEL_PLATE_ORDER }
 
   const lowCount = useMemo(() => lowStockProducts(products).length, [products])
 
@@ -399,10 +408,37 @@ export default function Inventory({ user, onSignOut }) {
       showToast(`${steelPlateRule.rule.supplierLabel} not found in suppliers — please add them first.`, 'error')
       return
     }
-    const draft = generateSteelPlateDraft(steelPlateRule.supplier)
+    const draft = generateSteelPlateDraft(steelPlateRule.supplier, purchasing.plateOrder)
     setEmailDrafts([draft])
     setEmailDraft(draft)
   }
+
+  // ── Purchasing rules ───────────────────────────────────────────────────────
+  // Every save reloads, so what is on screen is always what the database holds.
+  async function withPurchasingSave(work, successMessage) {
+    setSaving(true)
+    const err = await work()
+    if (err) showToast('Save failed: ' + err.message, 'error')
+    else showToast(successMessage)
+    await reload()
+    setSaving(false)
+    if (!err) setPurchasingModal(null)
+  }
+
+  const saveRule = rule =>
+    withPurchasingSave(() => db.saveRule(rule), 'Reorder rule updated!')
+
+  const savePlateOrder = lines =>
+    withPurchasingSave(() => db.savePlateOrder(purchasing.rule.id, lines), 'Plate quantities updated!')
+
+  const saveMaterials = ({ materials, categories, runSize }) =>
+    withPurchasingSave(async () => {
+      for (const category of categories) {
+        const err = await db.saveCategory(category)
+        if (err) return err
+      }
+      return (await db.saveMaterials(materials)) || (await db.saveRunSize(runSize))
+    }, 'Material requirements updated!')
 
   function closeEmailDrafts() { setEmailDraft(null); setEmailDrafts([]) }
 
@@ -555,8 +591,12 @@ export default function Inventory({ user, onSignOut }) {
 
         {activeTab === 'reorder' && (
           <ReorderTab
-            steelPlateRule={steelPlateRuleView}
+            steelPlateRule={steelPlateRule}
+            purchasing={purchasing}
             onGenerateSteelPlateEmail={generateSteelPlateEmail}
+            onEditRule={() => setPurchasingModal('rule')}
+            onEditQuantities={() => setPurchasingModal('plate')}
+            onEditMaterials={() => setPurchasingModal('materials')}
           />
         )}
 
@@ -627,6 +667,32 @@ export default function Inventory({ user, onSignOut }) {
           onCopy={() => { navigator.clipboard.writeText(emailToClipboardText(emailDraft)).then(() => showToast('Email copied to clipboard!')); dismissDraft() }}
           onDismiss={dismissDraft}
         />
+
+        {purchasingModal === 'rule' && (
+          <RuleModal
+            rule={purchasing.rule}
+            onSave={saveRule}
+            onClose={() => setPurchasingModal(null)}
+          />
+        )}
+
+        {purchasingModal === 'plate' && (
+          <PlateOrderModal
+            lines={purchasing.plateOrder}
+            onSave={savePlateOrder}
+            onClose={() => setPurchasingModal(null)}
+          />
+        )}
+
+        {purchasingModal === 'materials' && (
+          <MaterialsModal
+            materials={purchasing.materials}
+            categories={purchasing.categories}
+            runSize={purchasing.runSize}
+            onSave={saveMaterials}
+            onClose={() => setPurchasingModal(null)}
+          />
+        )}
 
         <Lightbox product={lightbox} onClose={() => setLightbox(null)} />
 

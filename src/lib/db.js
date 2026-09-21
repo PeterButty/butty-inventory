@@ -156,3 +156,86 @@ export async function deleteSupplier(id) {
   const { error } = await supabase.from('suppliers').delete().eq('id', id);
   return error;
 }
+
+// ── Purchasing rules ─────────────────────────────────────────────────────────
+// The steel plate quantities, the trigger level, the material list and the run
+// size. If the tables do not exist yet, the caller's defaults are used, so the
+// app still works before migration 002 has been run.
+
+export async function loadPurchasing(defaults) {
+  const [rRes, oRes, cRes, mRes, sRes] = await Promise.all([
+    supabase.from('reorder_rules').select('*').eq('id', 'steel_plate').maybeSingle(),
+    supabase.from('steel_plate_order').select('*').order('sort_order'),
+    supabase.from('material_categories').select('*').order('sort_order'),
+    supabase.from('material_requirements').select('*').order('sort_order'),
+    supabase.from('app_settings').select('*').eq('key', 'bar_tube_run_size').maybeSingle(),
+  ]);
+
+  // A missing table means the migration has not been run; fall back silently.
+  if (rRes.error || oRes.error || cRes.error || mRes.error || sRes.error) return defaults;
+
+  return {
+    rule: rRes.data ? {
+      id: rRes.data.id,
+      label: rRes.data.label,
+      skuPrefix: rRes.data.sku_prefix,
+      machinesWorth: rRes.data.machines_worth,
+      supplierId: rRes.data.supplier_id,
+      enabled: rRes.data.enabled,
+    } : defaults.rule,
+    plateOrder: oRes.data.map(r => ({ id:r.id, description:r.description, qty:r.qty, sortOrder:r.sort_order })),
+    categories: cRes.data.map(r => ({ id:r.id, label:r.label, stdLength:r.std_length === null ? null : Number(r.std_length), color:r.color, sortOrder:r.sort_order })),
+    materials:  mRes.data.map(r => ({ id:r.id, name:r.name, totalFt:Number(r.total_ft), categoryId:r.category_id, sortOrder:r.sort_order })),
+    runSize: Number(sRes.data?.value ?? defaults.runSize),
+    fromDatabase: true,
+  };
+}
+
+export async function saveRule(rule) {
+  const { error } = await supabase.from('reorder_rules').update({
+    sku_prefix: rule.skuPrefix,
+    machines_worth: rule.machinesWorth,
+    supplier_id: rule.supplierId,
+    updated_at: new Date().toISOString(),
+  }).eq('id', rule.id);
+  return error;
+}
+
+export async function saveRunSize(runSize) {
+  const { error } = await supabase.from('app_settings')
+    .upsert({ key:'bar_tube_run_size', value:runSize, updated_at:new Date().toISOString() });
+  return error;
+}
+
+// Replaces a whole editable list in one go. Rows the user removed are deleted,
+// the rest are written back with their new order.
+async function replaceRows(table, rows, extra = {}) {
+  const del = await supabase.from(table).delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  if (del.error) return del.error;
+  if (rows.length === 0) return null;
+  const ins = await supabase.from(table).insert(rows.map((r, i) => ({ ...r, ...extra, sort_order: i })));
+  return ins.error || null;
+}
+
+export async function savePlateOrder(ruleId, lines) {
+  return replaceRows(
+    'steel_plate_order',
+    lines.map(l => ({ description: l.description, qty: l.qty })),
+    { rule_id: ruleId }
+  );
+}
+
+export async function saveMaterials(materials) {
+  return replaceRows(
+    'material_requirements',
+    materials.map(m => ({ name: m.name, total_ft: m.totalFt, category_id: m.categoryId }))
+  );
+}
+
+export async function saveCategory(category) {
+  const { error } = await supabase.from('material_categories').update({
+    label: category.label,
+    std_length: category.stdLength,
+  }).eq('id', category.id);
+  return error;
+}

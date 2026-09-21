@@ -1,7 +1,6 @@
 // Purchase order emails.
 
 import { needsReorder } from './stock';
-import { STEEL_PLATE_ORDER } from './materials';
 
 function today() {
   return new Date().toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' });
@@ -76,14 +75,14 @@ export function generateEmailDraft(supplier, lowProducts) {
   };
 }
 
-export function generateSteelPlateDraft(supplier, order = STEEL_PLATE_ORDER) {
+export function generateSteelPlateDraft(supplier, order) {
   return {
     supplier,
-    items: order.map(i => ({ label:i.desc, detail:`${i.qty}x`, isRaw:true })),
+    items: order.map(i => ({ label:i.description, detail:`${i.qty}x`, isRaw:true })),
     subject: `Steel Plate Purchase Order — ${today()}`,
     body: composeLetter(
       'Please find below our steel plate order requirements:',
-      order.map(i => `  (${i.qty}x)  ${i.desc}`)
+      order.map(i => `  (${i.qty}x)  ${i.description}`)
     ),
   };
 }
