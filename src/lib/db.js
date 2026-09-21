@@ -207,29 +207,21 @@ export async function saveRunSize(runSize) {
   return error;
 }
 
-// Replaces a whole editable list in one go. Rows the user removed are deleted,
-// the rest are written back with their new order.
-async function replaceRows(table, rows, extra = {}) {
-  const del = await supabase.from(table).delete().neq('id', '00000000-0000-0000-0000-000000000000');
-  if (del.error) return del.error;
-  if (rows.length === 0) return null;
-  const ins = await supabase.from(table).insert(rows.map((r, i) => ({ ...r, ...extra, sort_order: i })));
-  return ins.error || null;
-}
-
+// Both lists are replaced inside a single database transaction, so a failed
+// save leaves the previous list exactly as it was rather than wiping it.
 export async function savePlateOrder(ruleId, lines) {
-  return replaceRows(
-    'steel_plate_order',
-    lines.map(l => ({ description: l.description, qty: l.qty })),
-    { rule_id: ruleId }
-  );
+  const { error } = await supabase.rpc('replace_plate_order', {
+    p_rule_id: ruleId,
+    p_rows: lines.map(l => ({ description: l.description, qty: l.qty })),
+  });
+  return error || null;
 }
 
 export async function saveMaterials(materials) {
-  return replaceRows(
-    'material_requirements',
-    materials.map(m => ({ name: m.name, total_ft: m.totalFt, category_id: m.categoryId }))
-  );
+  const { error } = await supabase.rpc('replace_material_requirements', {
+    p_rows: materials.map(m => ({ name: m.name, total_ft: m.totalFt, category_id: m.categoryId })),
+  });
+  return error || null;
 }
 
 export async function saveCategory(category) {
