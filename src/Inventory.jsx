@@ -5,6 +5,7 @@ import { needsReorder, lowStockProducts } from './lib/stock'
 import { calcMachineBuilds } from './lib/builds'
 import { evaluateSteelPlateRule } from './lib/rules'
 import { EMPTY_PURCHASING } from './lib/materials'
+import { EMPTY_HISTORY } from './lib/history'
 import {
   generateEmailDraft, generateSteelPlateDraft, groupLowStockBySupplier,
   emailToClipboardText, mailtoUrl,
@@ -78,6 +79,7 @@ export default function Inventory({ user, onSignOut }) {
   const [machineForm,  setMachineForm]  = useState(EMPTY_MACHINE)
   const [commitTarget, setCommitTarget] = useState(null)
   const [commitQty,    setCommitQty]    = useState(1)
+  const [commitNote,   setCommitNote]   = useState('')
 
   const [supplierModal,  setSupplierModal]  = useState(null)
   const [supplierForm,   setSupplierForm]   = useState(EMPTY_SUPPLIER)
@@ -99,6 +101,9 @@ export default function Inventory({ user, onSignOut }) {
   // Process routes and the pieces sitting part-finished on the shop floor.
   const [production, setProduction] = useState(EMPTY_PRODUCTION)
 
+  // What has actually been finished, and when.
+  const [history, setHistory] = useState(EMPTY_HISTORY)
+
   const t = THEMES[themeName]
 
   useEffect(() => { reload({ initial: true }) }, [])
@@ -112,10 +117,11 @@ export default function Inventory({ user, onSignOut }) {
   // Only the first load does that now; later refreshes swap the data in place.
   async function reload({ initial = false } = {}) {
     if (initial) setLoading(true)
-    const [records, rules, floor] = await Promise.all([
+    const [records, rules, floor, log] = await Promise.all([
       db.loadEverything(),
       db.loadPurchasing(EMPTY_PURCHASING),
       db.loadProduction(EMPTY_PRODUCTION),
+      db.loadBuildHistory(EMPTY_HISTORY),
     ])
     if (records.error) showToast('Error loading products: ' + records.error.message, 'error')
     setProducts(records.products)
@@ -123,6 +129,7 @@ export default function Inventory({ user, onSignOut }) {
     setSuppliers(records.suppliers)
     setPurchasing(rules)
     setProduction(floor)
+    setHistory(log)
     if (initial) setLoading(false)
   }
 
@@ -318,6 +325,7 @@ export default function Inventory({ user, onSignOut }) {
 
   function openCommit(machine) {
     setCommitQty(1)
+    setCommitNote('')
     setMachineModal(null)
     setCommitTarget(machine)
   }
@@ -328,15 +336,31 @@ export default function Inventory({ user, onSignOut }) {
     setSaving(true)
     // Only what the machine consumes on the bench. Parts that went into a
     // weldment were deducted when the weldment was built; taking them again
-    // here would double-deduct them.
-    const err = await db.applyStockDeltas(
-      required.map(c => ({ product_id:c.productId, delta: -(c.qty * qty) }))
+    // here would double-deduct them. The deduction and the log entry are one
+    // operation, so the history can never disagree with the shelves.
+    const err = await db.commitMachineBuild(
+      machine.id,
+      qty,
+      required.map(c => ({ product_id:c.productId, delta: -(c.qty * qty) })),
+      commitNote
     )
     if (err) showToast(`Nothing was changed — ${err.message}`, 'error')
-    else showToast(`✓ ${qty}× ${machine.name} committed — stock deducted.`)
+    else showToast(`✓ ${qty}× ${machine.name} built — stock deducted and logged.`)
     await reload()
     setSaving(false)
-    if (!err) setCommitTarget(null)
+    if (!err) { setCommitTarget(null); setCommitNote('') }
+  }
+
+  // Puts back exactly what that build took and marks it voided. The entry
+  // stays in the log rather than disappearing.
+  async function voidBuild(build, machineName) {
+    if (!confirm(`Void this build of ${build.qty}× ${machineName}?\n\nThe parts it used will go back into stock. The entry stays in the log, marked voided.`)) return
+    setSaving(true)
+    const err = await db.voidMachineBuild(build.id)
+    if (err) showToast('Could not void that build: ' + err.message, 'error')
+    else showToast('Build voided — parts returned to stock.')
+    await reload()
+    setSaving(false)
   }
 
   // ── Subassemblies ──────────────────────────────────────────────────────────
@@ -506,7 +530,7 @@ export default function Inventory({ user, onSignOut }) {
     </div>
   )
 
-  const context = { t, themeName, products, machines, suppliers, saving, supplierForProduct, showToast, production }
+  const context = { t, themeName, products, machines, suppliers, saving, supplierForProduct, showToast, production, history }
 
   return (
     <AppProvider value={context}>
@@ -684,6 +708,7 @@ export default function Inventory({ user, onSignOut }) {
             onClose={() => setMachineModal(null)}
             onEditBom={openEditMachine}
             onCommit={openCommit}
+            onVoidBuild={voidBuild}
           />
         )}
 
@@ -691,6 +716,8 @@ export default function Inventory({ user, onSignOut }) {
           machine={commitTarget}
           qty={commitQty}
           setQty={setCommitQty}
+          note={commitNote}
+          setNote={setCommitNote}
           onConfirm={commitBuild}
           onClose={() => setCommitTarget(null)}
         />

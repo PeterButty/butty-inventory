@@ -322,3 +322,56 @@ export async function saveRoute(productId, stageIds) {
   );
   return ins.error || null;
 }
+
+// ── Build history ────────────────────────────────────────────────────────────
+// Committed builds, newest first. Falls back to an empty log when the tables
+// are missing, so the app works before migration 007 has been run.
+
+export async function loadBuildHistory(defaults) {
+  const [bRes, lRes] = await Promise.all([
+    supabase.from('machine_builds').select('*').order('built_at', { ascending: false }).limit(500),
+    supabase.from('machine_build_lines').select('*'),
+  ]);
+
+  if (bRes.error || lRes.error) return defaults;
+
+  const linesByBuild = {};
+  for (const l of lRes.data) {
+    (linesByBuild[l.build_id] ||= []).push({ productId: l.product_id, qty: l.qty });
+  }
+
+  return {
+    builds: bRes.data.map(b => ({
+      id: b.id,
+      machineId: b.machine_id,
+      qty: b.qty,
+      note: b.note || '',
+      builtAt: b.built_at,
+      builtByEmail: b.built_by_email || '',
+      voidedAt: b.voided_at,
+      voidedByEmail: b.voided_by_email || '',
+      lines: linesByBuild[b.id] || [],
+    })),
+    fromDatabase: true,
+  };
+}
+
+// The deduction and the log entry land together or not at all.
+export async function commitMachineBuild(machineId, qty, deltas, note) {
+  const { error } = await supabase.rpc('commit_machine_build', {
+    p_machine_id: machineId,
+    p_qty: qty,
+    p_deltas: deltas,
+    p_note: note || null,
+  });
+  if (!error) return null;
+  if (error.code === 'PGRST202' || error.code === '42883') {
+    return { message: 'the build log is missing from the database — run migration 007_build_history.sql' };
+  }
+  return error;
+}
+
+export async function voidMachineBuild(buildId) {
+  const { error } = await supabase.rpc('void_machine_build', { p_build_id: buildId });
+  return error || null;
+}

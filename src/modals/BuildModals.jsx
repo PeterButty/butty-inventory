@@ -16,7 +16,7 @@ function TableHead({ headers, padding = '6px 8px' }) {
 }
 
 // ── Commit a machine build ───────────────────────────────────────────────────
-export function CommitBuildModal({ machine, qty, setQty, onConfirm, onClose }) {
+export function CommitBuildModal({ machine, qty, setQty, note, setNote, onConfirm, onClose }) {
   const { t, products, saving } = useApp()
   if (!machine) return null
 
@@ -36,7 +36,15 @@ export function CommitBuildModal({ machine, qty, setQty, onConfirm, onClose }) {
         onChange={e => setQty(Math.max(1, Math.min(max, parseInt(e.target.value) || 1)))}
         style={{ marginBottom:6 }}
       />
-      <div style={{ fontSize:10, color:t.textDim, marginBottom:20 }}>This will deduct all required components from stock.</div>
+      <div style={{ fontSize:10, color:t.textDim, marginBottom:16 }}>This will deduct all required components from stock.</div>
+
+      <SectionLabel style={{ marginBottom:8 }}>Note (optional)</SectionLabel>
+      <input
+        className="field-input" value={note}
+        onChange={e => setNote(e.target.value)}
+        placeholder="e.g. serial numbers, job number, customer"
+        style={{ marginBottom:20 }}
+      />
 
       <div style={{ background:t.inputBg, border:`1px solid ${t.border}`, padding:'12px 14px', marginBottom:20, fontSize:11 }}>
         {required.map((c, i) => (

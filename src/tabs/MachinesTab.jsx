@@ -1,6 +1,7 @@
 import { useApp } from '../AppContext'
 import { EmptyState } from '../components/common'
 import { calcMachineBuilds, buildStatusColor, componentColor, buildBarScale } from '../lib/builds'
+import { machinesBuilt, lastBuiltAt, timeAgo } from '../lib/history'
 
 // The component breakdown is shown in the machine list and again in the
 // machine detail pop-up, so it lives here and is exported for both.
@@ -26,6 +27,19 @@ export function ComponentCard({ detail, isBottleneck, barScale }) {
       <div className="build-bar">
         <div className="build-bar-inner" style={{ width:`${barPct}%`, background:color }} />
       </div>
+    </div>
+  )
+}
+
+// How many have actually been finished, from the build log.
+function BuiltNote({ machine }) {
+  const { t, history } = useApp()
+  const built = machinesBuilt(history, machine.id)
+  if (built === 0) return null
+  const last = timeAgo(lastBuiltAt(history, machine.id))
+  return (
+    <div style={{ fontSize:9, color:'#30D158', marginTop:4, letterSpacing:'0.06em' }}>
+      ✓ {built} built{last ? ` · last ${last}` : ''}
     </div>
   )
 }
@@ -60,6 +74,7 @@ function SummaryCard({ machine, onView }) {
         <div style={{ fontSize:9, color:t.textFaint, marginTop:8, letterSpacing:'0.06em' }}>
           {machine.components.length} components · click to view
         </div>
+        <BuiltNote machine={machine} />
       </div>
     </div>
   )

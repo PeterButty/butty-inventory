@@ -1,6 +1,7 @@
 import { useApp } from '../AppContext'
 import { Modal, StockStatusBadge, Pill } from '../components/common'
 import { calcMachineBuilds, buildStatusColor, componentColor, buildBarScale } from '../lib/builds'
+import { buildsFor, machinesBuilt, timeAgo, formatBuiltAt } from '../lib/history'
 
 function BuildSummary({ max, bottlenecks }) {
   if (max === 0) {
@@ -52,7 +53,67 @@ function SubassemblyContents({ product }) {
   )
 }
 
-export default function MachineDetailModal({ machine, onClose, onEditBom, onCommit }) {
+// What has actually been finished. A voided build stays on the list with its
+// parts already put back, struck through rather than deleted.
+function BuildHistory({ machine, onVoidBuild }) {
+  const { t, history, saving } = useApp()
+  const builds = buildsFor(history, machine.id)
+  const total = machinesBuilt(history, machine.id)
+
+  return (
+    <div style={{ padding:'0 32px 24px' }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+        <div style={{ fontSize:10, color:t.textDim, letterSpacing:'0.12em', textTransform:'uppercase' }}>Build History</div>
+        {total > 0 && (
+          <div style={{ fontSize:11, color:'#30D158' }}>
+            {total} {machine.name} built in total
+          </div>
+        )}
+      </div>
+
+      {builds.length === 0 ? (
+        <div style={{ padding:'20px', textAlign:'center', border:`1px dashed ${t.border}`, color:t.textFaint, fontSize:11 }}>
+          None recorded yet. Committing a build logs it here.
+        </div>
+      ) : (
+        <div style={{ display:'flex', flexDirection:'column', gap:6, maxHeight:220, overflowY:'auto' }}>
+          {builds.map(b => (
+            <div
+              key={b.id}
+              style={{
+                display:'flex', alignItems:'center', gap:12, padding:'9px 12px',
+                background:t.inputBg, border:`1px solid ${t.border}`,
+                opacity: b.voidedAt ? 0.5 : 1,
+              }}
+            >
+              <span style={{ fontFamily:"'Syne',sans-serif", fontSize:15, fontWeight:700, color: b.voidedAt ? t.textDim : '#30D158', minWidth:34, textDecoration: b.voidedAt ? 'line-through' : 'none' }}>
+                ×{b.qty}
+              </span>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:11, color:t.text }}>
+                  {formatBuiltAt(b.builtAt)}
+                  <span style={{ color:t.textFaint, marginLeft:8 }}>{timeAgo(b.builtAt)}</span>
+                </div>
+                <div style={{ fontSize:9, color:t.textDim, marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                  {b.builtByEmail || 'unknown'}
+                  {b.note && <span style={{ color:t.textMid }}> · {b.note}</span>}
+                  {b.voidedAt && <span style={{ color:'#FF9500' }}> · voided {timeAgo(b.voidedAt)}</span>}
+                </div>
+              </div>
+              {!b.voidedAt && (
+                <button className="btn-ghost" style={{ fontSize:9 }} disabled={saving} onClick={() => onVoidBuild(b, machine.name)}>
+                  Void
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default function MachineDetailModal({ machine, onClose, onEditBom, onCommit, onVoidBuild }) {
   const { t, products } = useApp()
   if (!machine) return null
 
@@ -188,6 +249,8 @@ export default function MachineDetailModal({ machine, onClose, onEditBom, onComm
           </tbody>
         </table>
       </div>
+
+      <BuildHistory machine={machine} onVoidBuild={onVoidBuild} />
 
       <div style={{ padding:'16px 32px', borderTop:`1px solid ${t.border}`, background:t.headerBg, display:'flex', justifyContent:'flex-end', gap:10 }}>
         <button className="btn-ghost" onClick={onClose}>Close</button>
