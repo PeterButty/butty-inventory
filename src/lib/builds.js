@@ -39,6 +39,35 @@ export function buildBarScale(componentDetails) {
   return Math.max(1, ...componentDetails.map(c => c.canBuild));
 }
 
+// Every part a machine needs, followed all the way down through its
+// subassemblies. The machine's own list names Main Body Weldment; the plate
+// parts are inside that, so anything counting real parts has to go down a
+// level rather than stop at the top.
+//
+// Returns a Map of product id → total pieces for `quantity` machines.
+export function explodeMachine(machine, products, quantity = 1) {
+  const totals = new Map();
+  const byId = new Map(products.map(p => [p.id, p]));
+
+  function walk(componentList, multiplier, seen) {
+    for (const comp of componentList || []) {
+      const part = byId.get(comp.productId);
+      if (!part) continue;
+
+      const pieces = comp.qty * multiplier;
+      totals.set(part.id, (totals.get(part.id) || 0) + pieces);
+
+      // Guard against an assembly that somehow contains itself.
+      if (part.partType === 'subassembly' && !seen.has(part.id)) {
+        walk(part.bomComponents, pieces, new Set(seen).add(part.id));
+      }
+    }
+  }
+
+  walk(machine.components, quantity, new Set([machine.id]));
+  return totals;
+}
+
 // Which parts must not be offered as components of `productId`, because using
 // them would create a loop: the part itself, plus anything that already
 // contains it at any depth.

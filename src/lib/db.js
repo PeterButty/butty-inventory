@@ -231,3 +231,58 @@ export async function saveCategory(category) {
   }).eq('id', category.id);
   return error;
 }
+
+// ── Process stages and work in progress ──────────────────────────────────────
+// Each part's route and the pieces sitting part-finished at each step. If the
+// tables do not exist yet the caller's empty default is used, so the app works
+// before migration 005 has been run.
+
+export async function loadProduction(defaults) {
+  const [sRes, rRes, qRes] = await Promise.all([
+    supabase.from('process_stages').select('*').order('sort_order'),
+    supabase.from('part_routes').select('*').order('sort_order'),
+    supabase.from('part_stage_qty').select('*'),
+  ]);
+
+  if (sRes.error || rRes.error || qRes.error) return defaults;
+
+  const routeByProduct = {};
+  for (const row of rRes.data) {
+    (routeByProduct[row.product_id] ||= []).push(row.stage_id);
+  }
+
+  const wipByProduct = {};
+  for (const row of qRes.data) {
+    if (row.qty > 0) (wipByProduct[row.product_id] ||= {})[row.stage_id] = row.qty;
+  }
+
+  return {
+    stages: sRes.data.map(s => ({ id: s.id, label: s.label, sortOrder: s.sort_order })),
+    routeByProduct,
+    wipByProduct,
+    fromDatabase: true,
+  };
+}
+
+// Applies every movement in one transaction, so a batch of work either lands
+// whole or not at all. Each move is { product_id, from_stage, to_stage, qty },
+// where a null from_stage means the pieces are being made and a null to_stage
+// means the route is finished and they become usable stock.
+export async function moveStageQty(moves) {
+  const { error } = await supabase.rpc('move_stage_qty', { p_moves: moves });
+  if (!error) return null;
+  if (error.code === 'PGRST202' || error.code === '42883') {
+    return { message: 'the production tables are missing from the database — run migration 005_process_stages.sql' };
+  }
+  return error;
+}
+
+export async function saveRoute(productId, stageIds) {
+  const del = await supabase.from('part_routes').delete().eq('product_id', productId);
+  if (del.error) return del.error;
+  if (stageIds.length === 0) return null;
+  const ins = await supabase.from('part_routes').insert(
+    stageIds.map((stage_id, i) => ({ product_id: productId, stage_id, sort_order: i + 1 }))
+  );
+  return ins.error || null;
+}

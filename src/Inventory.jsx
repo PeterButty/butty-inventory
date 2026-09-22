@@ -16,6 +16,7 @@ import InventoryTab from './tabs/InventoryTab'
 import MachinesTab from './tabs/MachinesTab'
 import SuppliersTab from './tabs/SuppliersTab'
 import ReorderTab from './tabs/ReorderTab'
+import ProductionTab from './tabs/ProductionTab'
 import ProductModal from './modals/ProductModal'
 import MachineModal from './modals/MachineModal'
 import MachineDetailModal from './modals/MachineDetailModal'
@@ -30,6 +31,7 @@ const TABS = [
   ['inventory', '📦  Inventory'],
   ['machines',  '🔧  Machine Builder'],
   ['suppliers', '🏢  Suppliers'],
+  ['production','🔨  Production'],
   ['reorder',   '🔁  Reorder Rules'],
 ]
 
@@ -38,6 +40,8 @@ const EMPTY_PRODUCT = {
   location:'', imageUrl:null, machineLinks:[], supplierId:null, partType:'purchased',
   rawMaterials:[], bomComponents:[], batchSize:'', leadTimeDays:'',
 }
+
+const EMPTY_PRODUCTION = { stages: [], routeByProduct: {}, wipByProduct: {}, fromDatabase: false }
 
 const EMPTY_SUPPLIER = { name:'', email:'', phone:'', contact:'', products:[], notes:'' }
 const EMPTY_MACHINE  = { name:'', description:'', imageUrl:null, components:[] }
@@ -91,6 +95,9 @@ export default function Inventory({ user, onSignOut }) {
   const [purchasing,      setPurchasing]      = useState(DEFAULT_PURCHASING)
   const [purchasingModal, setPurchasingModal] = useState(null)
 
+  // Process routes and the pieces sitting part-finished on the shop floor.
+  const [production, setProduction] = useState(EMPTY_PRODUCTION)
+
   const t = THEMES[themeName]
 
   useEffect(() => { reload({ initial: true }) }, [])
@@ -104,15 +111,17 @@ export default function Inventory({ user, onSignOut }) {
   // Only the first load does that now; later refreshes swap the data in place.
   async function reload({ initial = false } = {}) {
     if (initial) setLoading(true)
-    const [records, rules] = await Promise.all([
+    const [records, rules, floor] = await Promise.all([
       db.loadEverything(),
       db.loadPurchasing(DEFAULT_PURCHASING),
+      db.loadProduction(EMPTY_PRODUCTION),
     ])
     if (records.error) showToast('Error loading products: ' + records.error.message, 'error')
     setProducts(records.products)
     setMachines(records.machines)
     setSuppliers(records.suppliers)
     setPurchasing(rules)
+    setProduction(floor)
     if (initial) setLoading(false)
   }
 
@@ -440,6 +449,23 @@ export default function Inventory({ user, onSignOut }) {
       return (await db.saveMaterials(materials)) || (await db.saveRunSize(runSize))
     }, 'Material requirements updated!')
 
+  // ── Production ─────────────────────────────────────────────────────────────
+  // A whole batch of work in one transaction: either every part moves along or
+  // none does, so a run can never be half-recorded.
+  async function recordProduction(moves, onDone) {
+    if (moves.length === 0) return
+    setSaving(true)
+    const err = await db.moveStageQty(moves)
+    if (err) showToast(`Nothing was recorded — ${err.message}`, 'error')
+    else {
+      const pieces = moves.reduce((sum, m) => sum + m.qty, 0)
+      showToast(`Recorded ${pieces} piece${pieces === 1 ? '' : 's'} across ${moves.length} part${moves.length === 1 ? '' : 's'}.`)
+    }
+    await reload()
+    setSaving(false)
+    if (!err) onDone?.()
+  }
+
   function closeEmailDrafts() { setEmailDraft(null); setEmailDrafts([]) }
 
   function dismissDraft() {
@@ -460,7 +486,7 @@ export default function Inventory({ user, onSignOut }) {
     </div>
   )
 
-  const context = { t, themeName, products, machines, suppliers, saving, supplierForProduct, showToast }
+  const context = { t, themeName, products, machines, suppliers, saving, supplierForProduct, showToast, production }
 
   return (
     <AppProvider value={context}>
@@ -587,6 +613,10 @@ export default function Inventory({ user, onSignOut }) {
             onEdit={openEditSupplier}
             onDelete={removeSupplier}
           />
+        )}
+
+        {activeTab === 'production' && (
+          <ProductionTab production={production} onRecord={recordProduction} />
         )}
 
         {activeTab === 'reorder' && (

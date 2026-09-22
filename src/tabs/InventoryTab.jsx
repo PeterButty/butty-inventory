@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useApp } from '../AppContext'
 import { ImageThumb, StatusBadge, PartTypePill, Pill } from '../components/common'
 import { getStockStatus, needsReorder, lowStockProducts, sortRows, stockBarPercent, STATUS_META, STATUS_ORDER } from '../lib/stock'
+import { wipFor, stageLabel } from '../lib/production'
 
 const COLUMNS = [
   { label:'Photo',        field:null },
@@ -81,6 +82,25 @@ function PhotoCell({ product, onLightbox, onFile }) {
       <span style={{ fontSize:8, color:t.textDim, fontFamily:'inherit' }}>ADD</span>
       <input type="file" accept="image/*" style={{ display:'none' }} onChange={e => { onFile(product.id, e.target.files[0]); e.target.value = '' }} />
     </label>
+  )
+}
+
+// Pieces part-made and waiting at a process. Shown next to stock so the
+// difference between "finished" and "still on the floor" is visible without
+// leaving this screen.
+function WipNote({ product }) {
+  const { t, production } = useApp()
+  const waiting = wipFor(production, product.id)
+  const stages = Object.entries(waiting).filter(([, qty]) => qty > 0)
+  if (stages.length === 0) return null
+
+  const total = stages.reduce((sum, [, qty]) => sum + qty, 0)
+  const where = stages.map(([stageId, qty]) => `${qty} at ${stageLabel(production, stageId)}`).join(' · ')
+
+  return (
+    <span title={where} style={{ fontSize:9, color:'#FF9500', letterSpacing:'0.06em', whiteSpace:'nowrap' }}>
+      ⚙ {total} in process
+    </span>
   )
 }
 
@@ -220,6 +240,7 @@ export default function InventoryTab({
                       <div style={{ height:3, background:t.borderStrong, width:80, borderRadius:2, overflow:'hidden' }}>
                         <div style={{ height:'100%', width:`${stockBarPercent(p.stock, p.minStock)}%`, background:sm.color, borderRadius:2 }} />
                       </div>
+                      <WipNote product={p} />
                     </div>
                   </td>
                   <td style={{ padding:'10px 16px', color:t.textDim }}>{p.minStock.toLocaleString()} {p.unit}</td>
