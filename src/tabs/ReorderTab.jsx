@@ -1,5 +1,6 @@
+import { useState } from 'react'
 import { useApp } from '../AppContext'
-import { SectionLabel, StatusBadge, Pill } from '../components/common'
+import { SectionLabel, StatusBadge, Pill, FieldLabel, EmptyState } from '../components/common'
 import { STATUS_META } from '../lib/stock'
 import { barTubeRow } from '../lib/materials'
 
@@ -120,7 +121,7 @@ function SteelPlateCard({ rule, plateOrder, onGenerateEmail, onEditRule, onEditQ
                       </span>
                     </td>
                     <td style={{ padding:'10px 14px', color:t.textDim }}>
-                      {p.qtyPerMachineSet > 0 ? `${p.qtyPerMachineSet} ${p.unit}` : <span style={{ color:t.textFaint }}>not in any machine</span>}
+                      {p.qtyPerMachineSet > 0 ? `${p.qtyPerMachineSet} ${p.unit}` : <span style={{ color:t.textFaint }}>not used in this machine</span>}
                     </td>
                     <td style={{ padding:'10px 14px' }}>
                       {p.qtyPerMachineSet > 0
@@ -143,7 +144,7 @@ function SteelPlateCard({ rule, plateOrder, onGenerateEmail, onEditRule, onEditQ
   )
 }
 
-function BarTubeCard({ categories, materials, runSize, onEdit }) {
+function BarTubeCard({ categories, materials, runSize, machineName, onEdit }) {
   const { t } = useApp()
 
   return (
@@ -151,7 +152,7 @@ function BarTubeCard({ categories, materials, runSize, onEdit }) {
 
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:20, gap:16 }}>
         <div>
-          <CardHeading icon="📐" title={`Bar & Tube Stock — Build Run (${runSize} Machines)`} />
+          <CardHeading icon="📐" title={`Bar & Tube Stock — ${machineName} Run (${runSize} Machines)`} />
           <div style={{ fontSize:11, color:t.textDim, letterSpacing:'0.05em' }}>
             Quantities shown are for a full run of <strong style={{ color:t.textMid }}>{runSize} machines</strong>.
           </div>
@@ -224,46 +225,166 @@ function BarTubeCard({ categories, materials, runSize, onEdit }) {
   )
 }
 
+
+// ── Which machine's rules are showing ────────────────────────────────────────
+function MachinePicker({ machines, shownMachine, ruleEvaluations, purchasing, onPick }) {
+  const { t } = useApp()
+  if (machines.length < 2) return null
+
+  return (
+    <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:22 }}>
+      {machines.map(m => {
+        const active = m.id === shownMachine?.id
+        const hasRule = Boolean(purchasing.byMachine[m.id])
+        const triggered = ruleEvaluations[m.id]?.triggered
+        return (
+          <button
+            key={m.id}
+            onClick={() => onPick(m.id)}
+            style={{
+              padding:'7px 16px', fontFamily:"'DM Mono',monospace", fontSize:11,
+              letterSpacing:'0.06em', cursor:'pointer',
+              border:`1px solid ${active ? t.accent : t.border}`,
+              background: active ? `rgba(${t.accentRgb},0.12)` : t.inputBg,
+              color: active ? t.text : t.textDim,
+              display:'flex', alignItems:'center', gap:7,
+            }}
+          >
+            {m.name}
+            {triggered && <span style={{ color:'#FF3B3B' }}>●</span>}
+            {!hasRule && <span style={{ fontSize:9, color:t.textFaint }}>no rule</span>}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// A machine with no rule yet. Asks only for the thing that cannot be guessed:
+// which SKUs the rule should watch.
+function StartRuleCard({ machine, onStartRule }) {
+  const { t, saving } = useApp()
+  const [prefix, setPrefix] = useState('')
+  const ready = prefix.trim() !== '' && !saving
+
+  return (
+    <div style={{ background:t.cardBg, border:`1px dashed ${t.borderStrong}`, padding:'28px 32px', textAlign:'center' }}>
+      <div style={{ fontFamily:"'Syne',sans-serif", fontSize:16, fontWeight:700, color:t.text, marginBottom:8 }}>
+        No reorder rule for {machine.name} yet
+      </div>
+      <div style={{ fontSize:11, color:t.textDim, lineHeight:1.7, maxWidth:560, margin:'0 auto 20px' }}>
+        A rule watches the parts whose SKU starts with a prefix, and orders a fixed list of plate
+        when any of them drops to a few machines' worth of stock. Give it the prefix this machine's
+        parts use and you can fill in the rest from here.
+      </div>
+      <div style={{ display:'flex', gap:10, justifyContent:'center', alignItems:'flex-end' }}>
+        <div style={{ width:180, textAlign:'left' }}>
+          <FieldLabel>SKU Prefix</FieldLabel>
+          <input
+            className="field-input" value={prefix} placeholder="e.g. CC"
+            onChange={e => setPrefix(e.target.value.toUpperCase())}
+          />
+        </div>
+        <button
+          className="btn-primary"
+          disabled={!ready}
+          style={{ opacity: ready ? 1 : 0.4, cursor: ready ? 'pointer' : 'not-allowed' }}
+          onClick={() => onStartRule(machine.id, prefix.trim())}
+        >
+          {saving ? 'Creating…' : 'Create Rule'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function ReorderTab({
-  steelPlateRule, purchasing,
-  onGenerateSteelPlateEmail, onEditRule, onEditQuantities, onEditMaterials,
+  purchasing, machines, shownMachine, onPickMachine, ruleEvaluations,
+  steelPlateRule, config, materials,
+  onStartRule, onGenerateSteelPlateEmail, onEditRule, onEditQuantities, onEditMaterials,
 }) {
   const { t } = useApp()
+
+  const header = (
+    <div style={{ marginBottom:28 }}>
+      <div style={{ fontFamily:"'Syne',sans-serif", fontSize:22, fontWeight:700, color:t.text, marginBottom:6 }}>Reorder Rules</div>
+      <div style={{ fontSize:11, color:t.textDim, letterSpacing:'0.06em' }}>
+        Automated purchasing rules. Each machine has its own — its own parts, its own plate
+        quantities and its own run size.
+      </div>
+      {!purchasing.fromDatabase && (
+        <div style={{ marginTop:10, background:'rgba(255,149,0,0.08)', border:'1px solid rgba(255,149,0,0.3)', padding:'10px 14px', fontSize:11, color:'#FF9500' }}>
+          ⚠ Purchasing rules are not set up yet — run migrations 002 and 006 in Supabase to make
+          them editable here.
+        </div>
+      )}
+      {purchasing.fromDatabase && purchasing.unattachedRules > 0 && (
+        <div style={{ marginTop:10, background:'rgba(255,149,0,0.08)', border:'1px solid rgba(255,149,0,0.3)', padding:'10px 14px', fontSize:11, color:'#FF9500', lineHeight:1.7 }}>
+          ⚠ {purchasing.unattachedRules === 1 ? 'A rule exists' : `${purchasing.unattachedRules} rules exist`} but
+          {purchasing.unattachedRules === 1 ? ' is' : ' are'} not attached to a machine yet — run
+          migration 006_multi_machine.sql in Supabase. Nothing has been lost; the rule is hidden
+          only until it knows which machine it belongs to.
+        </div>
+      )}
+    </div>
+  )
+
+  const picker = (
+    <MachinePicker
+      machines={machines}
+      shownMachine={shownMachine}
+      ruleEvaluations={ruleEvaluations}
+      purchasing={purchasing}
+      onPick={onPickMachine}
+    />
+  )
+
+  if (!shownMachine) {
+    return (
+      <div style={{ padding:'28px 40px', maxWidth:1100, margin:'0 auto' }}>
+        {header}
+        <EmptyState padding="40px">Add a machine first — rules hang off a machine.</EmptyState>
+      </div>
+    )
+  }
+
+  if (!config || !steelPlateRule) {
+    return (
+      <div style={{ padding:'28px 40px', maxWidth:1100, margin:'0 auto' }}>
+        {header}
+        {picker}
+        <StartRuleCard machine={shownMachine} onStartRule={onStartRule} />
+      </div>
+    )
+  }
+
   const supplierName = steelPlateRule.supplier?.name || 'the chosen supplier'
+  const runSize = shownMachine.runSize ?? 20
 
   return (
     <div style={{ padding:'28px 40px', maxWidth:1100, margin:'0 auto' }}>
-      <div style={{ marginBottom:28 }}>
-        <div style={{ fontFamily:"'Syne',sans-serif", fontSize:22, fontWeight:700, color:t.text, marginBottom:6 }}>Reorder Rules</div>
-        <div style={{ fontSize:11, color:t.textDim, letterSpacing:'0.06em' }}>
-          Automated purchasing rules. Steel plate orders are grouped and sent together to {supplierName}.
-        </div>
-        {!purchasing.fromDatabase && (
-          <div style={{ marginTop:10, background:'rgba(255,149,0,0.08)', border:'1px solid rgba(255,149,0,0.3)', padding:'10px 14px', fontSize:11, color:'#FF9500' }}>
-            ⚠ These rules are still the built-in defaults and cannot be edited yet — run migration
-            002_purchasing_rules.sql in Supabase to make them editable here.
-          </div>
-        )}
-      </div>
+      {header}
+      {picker}
 
       <SteelPlateCard
         rule={steelPlateRule}
-        plateOrder={purchasing.plateOrder}
+        plateOrder={config.plateOrder}
         onGenerateEmail={onGenerateSteelPlateEmail}
         onEditRule={onEditRule}
         onEditQuantities={onEditQuantities}
       />
 
       <div style={{ background:`rgba(${t.accentRgb},0.05)`, border:`1px solid rgba(${t.accentRgb},0.2)`, padding:'14px 18px', fontSize:11, color:t.textDim, lineHeight:1.7 }}>
-        <strong style={{ color:t.textMid }}>How this rule works:</strong> Every product with an SKU starting with <strong style={{ color:t.text }}>{purchasing.rule.skuPrefix}</strong> is checked against the machines it's used in.
-        If the on-hand quantity for any {purchasing.rule.skuPrefix} part falls to or below <strong style={{ color:'#FF9500' }}>{purchasing.rule.machinesWorth} × (qty needed per machine set)</strong>,
+        <strong style={{ color:t.textMid }}>How this rule works:</strong> Every product with an SKU starting with <strong style={{ color:t.text }}>{config.rule.skuPrefix}</strong> is checked against how many {shownMachine.name} needs.
+        If the on-hand quantity for any {config.rule.skuPrefix} part falls to or below <strong style={{ color:'#FF9500' }}>{config.rule.machinesWorth} × (qty needed per machine)</strong>,
         the rule triggers and a steel plate order email is generated for <strong style={{ color:'#30D158' }}>{supplierName}</strong> covering all plate sizes in the fixed quantities above.
       </div>
 
       <BarTubeCard
         categories={purchasing.categories}
-        materials={purchasing.materials}
-        runSize={purchasing.runSize}
+        materials={materials}
+        runSize={runSize}
+        machineName={shownMachine.name}
         onEdit={onEditMaterials}
       />
     </div>

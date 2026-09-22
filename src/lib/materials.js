@@ -70,14 +70,14 @@ export const DEFAULT_MATERIALS = [
   { name:'Nylatron Ø2.00" x 2.00"',         totalFt:6.66,  categoryId:'NYLATRON'   },
 ].map((m, i) => ({ ...m, id:`d${i}`, sortOrder:i }));
 
-// The whole purchasing configuration as the app uses it, before anything is
-// loaded from the database.
-export const DEFAULT_PURCHASING = {
-  rule:       DEFAULT_RULE,
-  plateOrder: DEFAULT_PLATE_ORDER,
+// Purchasing as the app holds it: keyed by machine, because each machine has
+// its own rule, plate quantities and material footages. Standard lengths are
+// shared. Empty until the tables are read — the Reorder Rules tab says so
+// plainly rather than showing another machine's numbers.
+export const EMPTY_PURCHASING = {
+  byMachine: {},
+  materialsByMachine: {},
   categories: DEFAULT_CATEGORIES,
-  materials:  DEFAULT_MATERIALS,
-  runSize:    DEFAULT_RUN_SIZE,
   fromDatabase: false,
 };
 

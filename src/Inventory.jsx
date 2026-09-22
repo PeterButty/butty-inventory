@@ -4,7 +4,7 @@ import { THEMES, DEFAULT_THEME, buildCss } from './lib/theme'
 import { needsReorder, lowStockProducts } from './lib/stock'
 import { calcMachineBuilds } from './lib/builds'
 import { evaluateSteelPlateRule } from './lib/rules'
-import { DEFAULT_PURCHASING } from './lib/materials'
+import { EMPTY_PURCHASING } from './lib/materials'
 import {
   generateEmailDraft, generateSteelPlateDraft, groupLowStockBySupplier,
   emailToClipboardText, mailtoUrl,
@@ -92,8 +92,9 @@ export default function Inventory({ user, onSignOut }) {
   // Purchasing rules: the plate quantities, trigger level, material list and
   // run size. Loaded from the database, falling back to the built-in defaults
   // when migration 002 has not been run.
-  const [purchasing,      setPurchasing]      = useState(DEFAULT_PURCHASING)
-  const [purchasingModal, setPurchasingModal] = useState(null)
+  const [purchasing,       setPurchasing]       = useState(EMPTY_PURCHASING)
+  const [purchasingModal,  setPurchasingModal]  = useState(null)
+  const [reorderMachineId, setReorderMachineId] = useState(null)
 
   // Process routes and the pieces sitting part-finished on the shop floor.
   const [production, setProduction] = useState(EMPTY_PRODUCTION)
@@ -113,7 +114,7 @@ export default function Inventory({ user, onSignOut }) {
     if (initial) setLoading(true)
     const [records, rules, floor] = await Promise.all([
       db.loadEverything(),
-      db.loadPurchasing(DEFAULT_PURCHASING),
+      db.loadPurchasing(EMPTY_PURCHASING),
       db.loadProduction(EMPTY_PRODUCTION),
     ])
     if (records.error) showToast('Error loading products: ' + records.error.message, 'error')
@@ -129,10 +130,30 @@ export default function Inventory({ user, onSignOut }) {
     return suppliers.find(s => s.products?.includes(productId)) || null
   }
 
-  const steelPlateRule = useMemo(
-    () => evaluateSteelPlateRule(products, machines, suppliers, purchasing.rule),
-    [products, machines, suppliers, purchasing.rule]
-  )
+  // Every machine that has a rule, evaluated. The header button and the tab
+  // marker watch all of them; the tab itself shows one machine at a time.
+  const ruleEvaluations = useMemo(() => {
+    const out = {}
+    for (const machine of machines) {
+      const config = purchasing.byMachine[machine.id]
+      if (config) out[machine.id] = evaluateSteelPlateRule(products, machine, suppliers, config.rule)
+    }
+    return out
+  }, [products, machines, suppliers, purchasing.byMachine])
+
+  const triggeredMachineId = machines.find(m => ruleEvaluations[m.id]?.triggered)?.id || null
+
+  // The machine whose rules the Reorder Rules tab is showing. Defaults to the
+  // first machine that has one rather than the first machine outright.
+  const shownMachineId = reorderMachineId
+    || machines.find(m => purchasing.byMachine[m.id])?.id
+    || machines[0]?.id
+    || null
+
+  const shownMachine   = machines.find(m => m.id === shownMachineId) || null
+  const shownConfig    = shownMachineId ? purchasing.byMachine[shownMachineId] || null : null
+  const shownRule      = shownMachineId ? ruleEvaluations[shownMachineId] || null : null
+  const shownMaterials = purchasing.materialsByMachine[shownMachineId] || []
 
   const lowCount = useMemo(() => lowStockProducts(products).length, [products])
 
@@ -415,11 +436,11 @@ export default function Inventory({ user, onSignOut }) {
   }
 
   function generateSteelPlateEmail() {
-    if (!steelPlateRule.supplier) {
-      showToast(`${steelPlateRule.rule.supplierLabel} not found in suppliers — please add them first.`, 'error')
+    if (!shownConfig || !shownRule?.supplier) {
+      showToast('This rule has no supplier chosen — pick one with Edit Rule.', 'error')
       return
     }
-    const draft = generateSteelPlateDraft(steelPlateRule.supplier, purchasing.plateOrder)
+    const draft = generateSteelPlateDraft(shownRule.supplier, shownConfig.plateOrder)
     setEmailDrafts([draft])
     setEmailDraft(draft)
   }
@@ -440,32 +461,29 @@ export default function Inventory({ user, onSignOut }) {
     withPurchasingSave(() => db.saveRule(rule), 'Reorder rule updated!')
 
   const savePlateOrder = lines =>
-    withPurchasingSave(() => db.savePlateOrder(purchasing.rule.id, lines), 'Plate quantities updated!')
+    withPurchasingSave(() => db.savePlateOrder(shownConfig.rule.id, lines), 'Plate quantities updated!')
 
+  // Standard lengths are shared across machines; the footages and the run size
+  // belong to the machine being shown.
   const saveMaterials = ({ materials, categories, runSize }) =>
     withPurchasingSave(async () => {
       for (const category of categories) {
         const err = await db.saveCategory(category)
         if (err) return err
       }
-      return (await db.saveMaterials(materials)) || (await db.saveRunSize(runSize))
+      return (await db.saveMaterials(shownMachineId, materials))
+        || (await db.saveRunSize(shownMachineId, runSize))
     }, 'Material requirements updated!')
 
-  // ── Production ─────────────────────────────────────────────────────────────
-  // A whole batch of work in one transaction: either every part moves along or
-  // none does, so a run can never be half-recorded.
-  async function recordProduction(moves, onDone) {
-    if (moves.length === 0) return
+  // Starting a rule for a machine that does not have one yet.
+  async function startRuleFor(machineId, skuPrefix) {
     setSaving(true)
-    const err = await db.moveStageQty(moves)
-    if (err) showToast(`Nothing was recorded — ${err.message}`, 'error')
-    else {
-      const pieces = moves.reduce((sum, m) => sum + m.qty, 0)
-      showToast(`Recorded ${pieces} piece${pieces === 1 ? '' : 's'} across ${moves.length} part${moves.length === 1 ? '' : 's'}.`)
-    }
+    const { error } = await db.createRule(machineId, skuPrefix)
+    if (error) showToast('Could not start the rule: ' + error.message, 'error')
+    else showToast('Reorder rule created — set its quantities next.')
     await reload()
     setSaving(false)
-    if (!err) onDone?.()
+    if (!error) setReorderMachineId(machineId)
   }
 
   function closeEmailDrafts() { setEmailDraft(null); setEmailDrafts([]) }
@@ -531,9 +549,9 @@ export default function Inventory({ user, onSignOut }) {
               </button>
             )}
 
-            {steelPlateRule.triggered && (
+            {triggeredMachineId && (
               <button
-                onClick={() => setActiveTab('reorder')}
+                onClick={() => { setReorderMachineId(triggeredMachineId); setActiveTab('reorder') }}
                 style={{ background:'rgba(255,59,59,0.15)', color:'#FF3B3B', border:'1px solid rgba(255,59,59,0.4)', padding:'7px 14px', fontFamily:"'DM Mono',monospace", fontSize:11, cursor:'pointer', letterSpacing:'0.06em', display:'flex', alignItems:'center', gap:6, animation:'pulse 2s infinite' }}
               >
                 🔴 Steel Plate Reorder
@@ -569,7 +587,7 @@ export default function Inventory({ user, onSignOut }) {
         {/* ── Tabs ── */}
         <div style={{ background:t.headerBg, borderBottom:`1px solid ${t.border}`, padding:'0 40px', display:'flex', gap:0 }}>
           {TABS.map(([tab, label]) => {
-            const flagged = tab === 'reorder' && steelPlateRule.triggered
+            const flagged = tab === 'reorder' && Boolean(triggeredMachineId)
             return (
               <button
                 key={tab}
@@ -623,8 +641,15 @@ export default function Inventory({ user, onSignOut }) {
 
         {activeTab === 'reorder' && (
           <ReorderTab
-            steelPlateRule={steelPlateRule}
             purchasing={purchasing}
+            machines={machines}
+            shownMachine={shownMachine}
+            onPickMachine={setReorderMachineId}
+            ruleEvaluations={ruleEvaluations}
+            steelPlateRule={shownRule}
+            config={shownConfig}
+            materials={shownMaterials}
+            onStartRule={startRuleFor}
             onGenerateSteelPlateEmail={generateSteelPlateEmail}
             onEditRule={() => setPurchasingModal('rule')}
             onEditQuantities={() => setPurchasingModal('plate')}
@@ -702,7 +727,7 @@ export default function Inventory({ user, onSignOut }) {
 
         {purchasingModal === 'rule' && (
           <RuleModal
-            rule={purchasing.rule}
+            rule={shownConfig.rule}
             onSave={saveRule}
             onClose={() => setPurchasingModal(null)}
           />
@@ -710,7 +735,7 @@ export default function Inventory({ user, onSignOut }) {
 
         {purchasingModal === 'plate' && (
           <PlateOrderModal
-            lines={purchasing.plateOrder}
+            lines={shownConfig.plateOrder}
             onSave={savePlateOrder}
             onClose={() => setPurchasingModal(null)}
           />
@@ -718,9 +743,9 @@ export default function Inventory({ user, onSignOut }) {
 
         {purchasingModal === 'materials' && (
           <MaterialsModal
-            materials={purchasing.materials}
+            materials={shownMaterials}
             categories={purchasing.categories}
-            runSize={purchasing.runSize}
+            runSize={shownMachine?.runSize ?? 20}
             onSave={saveMaterials}
             onClose={() => setPurchasingModal(null)}
           />

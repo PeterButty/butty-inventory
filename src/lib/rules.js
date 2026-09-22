@@ -12,7 +12,10 @@ import { getStockStatus } from './stock';
 // The rule comes from the database, so the prefix, the trigger level and the
 // supplier are all editable without touching code. The supplier is held by id
 // rather than matched on the spelling of its name.
-export function evaluateSteelPlateRule(products, machines, suppliers, rule) {
+// `machine` is the machine this rule belongs to. Usage is counted against
+// that machine alone — a rule for the SW150 should not have its threshold
+// moved by what a different machine happens to use.
+export function evaluateSteelPlateRule(products, machine, suppliers, rule) {
   const prefix = (rule.skuPrefix || '').toUpperCase();
 
   const monitored = prefix ? products.filter(p =>
@@ -24,10 +27,8 @@ export function evaluateSteelPlateRule(products, machines, suppliers, rule) {
   ) : [];
 
   const parts = monitored.map(p => {
-    const qtyPerMachineSet = machines.reduce((total, m) => {
-      const comp = m.components.find(c => c.productId === p.id);
-      return total + (comp ? comp.qty : 0);
-    }, 0);
+    const comp = (machine?.components || []).find(c => c.productId === p.id);
+    const qtyPerMachineSet = comp ? comp.qty : 0;
     const threshold = qtyPerMachineSet * rule.machinesWorth;
     return {
       ...p,

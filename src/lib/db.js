@@ -20,6 +20,7 @@ export function dbProduct(r) {
 export function dbMachine(r) {
   return {
     id: r.id, name: r.name, description: r.description, imageUrl: r.image_url,
+    runSize: r.run_size ?? 20,
     components: (r.machine_components || []).map(c => ({
       productId: c.product_id, qty: c.qty, note: c.note || '',
     })),
@@ -162,33 +163,68 @@ export async function deleteSupplier(id) {
 // size. If the tables do not exist yet, the caller's defaults are used, so the
 // app still works before migration 002 has been run.
 
+// Purchasing is per machine now: each machine has at most one reorder rule,
+// its own plate quantities and its own material footages. Standard lengths are
+// shared, since a 24 ft stick is 24 ft whatever it is cut for.
 export async function loadPurchasing(defaults) {
-  const [rRes, oRes, cRes, mRes, sRes] = await Promise.all([
-    supabase.from('reorder_rules').select('*').eq('id', 'steel_plate').maybeSingle(),
+  const [rRes, oRes, cRes, mRes] = await Promise.all([
+    supabase.from('reorder_rules').select('*'),
     supabase.from('steel_plate_order').select('*').order('sort_order'),
     supabase.from('material_categories').select('*').order('sort_order'),
     supabase.from('material_requirements').select('*').order('sort_order'),
-    supabase.from('app_settings').select('*').eq('key', 'bar_tube_run_size').maybeSingle(),
   ]);
 
   // A missing table means the migration has not been run; fall back silently.
-  if (rRes.error || oRes.error || cRes.error || mRes.error || sRes.error) return defaults;
+  if (rRes.error || oRes.error || cRes.error || mRes.error) return defaults;
+
+  const plateByRule = {};
+  for (const r of oRes.data) {
+    (plateByRule[r.rule_id] ||= []).push({ id: r.id, description: r.description, qty: r.qty, sortOrder: r.sort_order });
+  }
+
+  const materialsByMachine = {};
+  for (const r of mRes.data) {
+    (materialsByMachine[r.machine_id] ||= []).push({
+      id: r.id, name: r.name, totalFt: Number(r.total_ft),
+      categoryId: r.category_id, sortOrder: r.sort_order,
+    });
+  }
+
+  // A rule with no machine is one that migration 006 has not attached yet.
+  const unattachedRules = rRes.data.filter(r => !r.machine_id).length;
+
+  const byMachine = {};
+  for (const r of rRes.data) {
+    if (!r.machine_id) continue;
+    byMachine[r.machine_id] = {
+      rule: {
+        id: r.id, machineId: r.machine_id, label: r.label,
+        skuPrefix: r.sku_prefix, machinesWorth: r.machines_worth,
+        supplierId: r.supplier_id, enabled: r.enabled,
+      },
+      plateOrder: plateByRule[r.id] || [],
+    };
+  }
 
   return {
-    rule: rRes.data ? {
-      id: rRes.data.id,
-      label: rRes.data.label,
-      skuPrefix: rRes.data.sku_prefix,
-      machinesWorth: rRes.data.machines_worth,
-      supplierId: rRes.data.supplier_id,
-      enabled: rRes.data.enabled,
-    } : defaults.rule,
-    plateOrder: oRes.data.map(r => ({ id:r.id, description:r.description, qty:r.qty, sortOrder:r.sort_order })),
-    categories: cRes.data.map(r => ({ id:r.id, label:r.label, stdLength:r.std_length === null ? null : Number(r.std_length), color:r.color, sortOrder:r.sort_order })),
-    materials:  mRes.data.map(r => ({ id:r.id, name:r.name, totalFt:Number(r.total_ft), categoryId:r.category_id, sortOrder:r.sort_order })),
-    runSize: Number(sRes.data?.value ?? defaults.runSize),
+    byMachine,
+    materialsByMachine,
+    categories: cRes.data.map(r => ({
+      id: r.id, label: r.label,
+      stdLength: r.std_length === null ? null : Number(r.std_length),
+      color: r.color, sortOrder: r.sort_order,
+    })),
+    unattachedRules,
     fromDatabase: true,
   };
+}
+
+export async function createRule(machineId, skuPrefix) {
+  const { data, error } = await supabase.rpc('create_reorder_rule', {
+    p_machine_id: machineId,
+    p_sku_prefix: skuPrefix,
+  });
+  return { id: data, error };
 }
 
 export async function saveRule(rule) {
@@ -201,9 +237,8 @@ export async function saveRule(rule) {
   return error;
 }
 
-export async function saveRunSize(runSize) {
-  const { error } = await supabase.from('app_settings')
-    .upsert({ key:'bar_tube_run_size', value:runSize, updated_at:new Date().toISOString() });
+export async function saveRunSize(machineId, runSize) {
+  const { error } = await supabase.from('machines').update({ run_size: runSize }).eq('id', machineId);
   return error;
 }
 
@@ -217,8 +252,9 @@ export async function savePlateOrder(ruleId, lines) {
   return error || null;
 }
 
-export async function saveMaterials(materials) {
+export async function saveMaterials(machineId, materials) {
   const { error } = await supabase.rpc('replace_material_requirements', {
+    p_machine_id: machineId,
     p_rows: materials.map(m => ({ name: m.name, total_ft: m.totalFt, category_id: m.categoryId })),
   });
   return error || null;
