@@ -16,21 +16,50 @@ export function componentColor(canBuild, isBottleneck) {
   return '#30D158';
 }
 
+// Parts that a weldment on this machine's list already accounts for.
+//
+// The SW150's list names all 137 parts flat, including the 68 that are also
+// components of the 30 weldments on that same list. Counting both would mean
+// the machine needs a Main Body Weldment *and* another set of the plates that
+// went into building it. The plates are consumed making the weldment, so only
+// the weldment is required at machine level.
+//
+// Returns a Map of product id → the name of the assembly that supplies it.
+export function partsSuppliedByAssemblies(machine, products) {
+  const byId = new Map(products.map(p => [p.id, p]));
+  const supplied = new Map();
+
+  for (const comp of machine.components || []) {
+    const part = byId.get(comp.productId);
+    if (part?.partType !== 'subassembly') continue;
+    for (const child of part.bomComponents || []) {
+      if (!supplied.has(child.productId)) supplied.set(child.productId, part.name);
+    }
+  }
+  return supplied;
+}
+
 export function calcMachineBuilds(machine, products) {
   const components = machine.components || [];
-  if (components.length === 0) return { max:0, bottlenecks:[], componentDetails:[] };
+  if (components.length === 0) return { max:0, bottlenecks:[], componentDetails:[], required:[] };
+
+  const supplied = partsSuppliedByAssemblies(machine, products);
 
   const componentDetails = components.map(comp => {
     const prod = products.find(p => p.id === comp.productId);
     const stock = prod ? prod.stock : 0;
     // A part that is no longer in inventory blocks the build entirely.
     const canBuild = prod ? Math.floor(stock / comp.qty) : 0;
-    return { ...comp, prod, stock, canBuild };
+    return { ...comp, prod, stock, canBuild, suppliedBy: supplied.get(comp.productId) || null };
   });
 
-  const max = Math.min(...componentDetails.map(c => c.canBuild));
-  const bottlenecks = componentDetails.filter(c => c.canBuild === max);
-  return { max, bottlenecks, componentDetails };
+  // Only what the machine actually needs on the bench limits the build.
+  const required = componentDetails.filter(c => !c.suppliedBy);
+  if (required.length === 0) return { max:0, bottlenecks:[], componentDetails, required };
+
+  const max = Math.min(...required.map(c => c.canBuild));
+  const bottlenecks = required.filter(c => c.canBuild === max);
+  return { max, bottlenecks, componentDetails, required };
 }
 
 // The widest bar in the component breakdown, so the bars are relative to the

@@ -56,8 +56,8 @@ export default function MachineDetailModal({ machine, onClose, onEditBom, onComm
   const { t, products } = useApp()
   if (!machine) return null
 
-  const { max, bottlenecks, componentDetails } = calcMachineBuilds(machine, products)
-  const barScale = buildBarScale(componentDetails)
+  const { max, bottlenecks, componentDetails, required } = calcMachineBuilds(machine, products)
+  const barScale = buildBarScale(required)
   const statusColor = buildStatusColor(max)
 
   return (
@@ -90,7 +90,12 @@ export default function MachineDetailModal({ machine, onClose, onEditBom, onComm
           <div style={{ display:'flex', flexDirection:'column', justifyContent:'center', gap:8 }}>
             <div>
               <div style={{ fontSize:9, color:t.textDim, letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:2 }}>Components</div>
-              <div style={{ fontSize:16, fontWeight:600, color:t.text }}>{machine.components.length} parts</div>
+              <div style={{ fontSize:16, fontWeight:600, color:t.text }}>{required.length} parts</div>
+              {componentDetails.length > required.length && (
+                <div style={{ fontSize:9, color:t.textFaint, marginTop:2 }}>
+                  + {componentDetails.length - required.length} inside weldments
+                </div>
+              )}
             </div>
           </div>
           <div style={{ width:1, background:t.border }} />
@@ -125,12 +130,14 @@ export default function MachineDetailModal({ machine, onClose, onEditBom, onComm
             </tr>
           </thead>
           <tbody>
-            {componentDetails.map((c, idx) => {
-              const isBottleneck = bottlenecks.some(b => b.productId === c.productId)
+            {/* What the machine needs on the bench first, then the parts that
+                go into the weldments above. */}
+            {[...componentDetails].sort((a, b) => (a.suppliedBy ? 1 : 0) - (b.suppliedBy ? 1 : 0)).map((c, idx) => {
+              const isBottleneck = !c.suppliedBy && bottlenecks.some(b => b.productId === c.productId)
               const color = componentColor(c.canBuild, isBottleneck)
               const barPct = barScale > 0 ? Math.round((c.canBuild / barScale) * 100) : 0
               return (
-                <tr key={idx} style={{ borderBottom:`1px solid ${t.border}`, background:isBottleneck ? 'rgba(255,149,0,0.04)' : 'transparent' }}>
+                <tr key={idx} style={{ borderBottom:`1px solid ${t.border}`, background:isBottleneck ? 'rgba(255,149,0,0.04)' : 'transparent', opacity:c.suppliedBy ? 0.55 : 1 }}>
                   <td style={{ padding:'12px 10px' }}>
                     <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                       {c.prod?.imageUrl && <img src={c.prod.imageUrl} alt="" style={{ width:28, height:28, objectFit:'cover', borderRadius:2 }} />}
@@ -161,8 +168,16 @@ export default function MachineDetailModal({ machine, onClose, onEditBom, onComm
                     <span style={{ fontSize:10, color:t.textDim, marginLeft:4 }}>{c.prod?.unit || 'pcs'}</span>
                   </td>
                   <td style={{ padding:'12px 10px' }}>
-                    <span style={{ fontFamily:"'Syne',sans-serif", fontSize:18, fontWeight:700, color }}>{c.canBuild}</span>
-                    {isBottleneck && <div style={{ fontSize:9, color:'#FF9500', letterSpacing:'0.06em', marginTop:2 }}>⚠ BOTTLENECK</div>}
+                    {c.suppliedBy ? (
+                      <span style={{ fontSize:9, color:'#64D2FF', letterSpacing:'0.06em' }} title={`Goes into ${c.suppliedBy}, so it is not needed again at machine level`}>
+                        goes into {c.suppliedBy}
+                      </span>
+                    ) : (
+                      <>
+                        <span style={{ fontFamily:"'Syne',sans-serif", fontSize:18, fontWeight:700, color }}>{c.canBuild}</span>
+                        {isBottleneck && <div style={{ fontSize:9, color:'#FF9500', letterSpacing:'0.06em', marginTop:2 }}>⚠ BOTTLENECK</div>}
+                      </>
+                    )}
                   </td>
                   <td style={{ padding:'12px 10px' }}>
                     <StockStatusBadge product={c.prod} small />

@@ -67,9 +67,10 @@ function SummaryCard({ machine, onView }) {
 
 function MachineCard({ machine, onView, onEdit, onDelete, onCommit }) {
   const { t, products } = useApp()
-  const { max, bottlenecks, componentDetails } = calcMachineBuilds(machine, products)
-  const barScale = buildBarScale(componentDetails)
+  const { max, bottlenecks, componentDetails, required } = calcMachineBuilds(machine, products)
+  const barScale = buildBarScale(required)
   const statusColor = buildStatusColor(max)
+  const viaAssembly = componentDetails.length - required.length
 
   return (
     <div className="machine-card">
@@ -101,8 +102,16 @@ function MachineCard({ machine, onView, onEdit, onDelete, onCommit }) {
         </div>
       </div>
 
+      {viaAssembly > 0 && (
+        <div style={{ fontSize:10, color:t.textFaint, letterSpacing:'0.04em', marginBottom:10 }}>
+          Showing the {required.length} items this machine needs on the bench.
+          Another {viaAssembly} on the parts list are components of the weldments above,
+          so they are accounted for when those are built rather than counted again here.
+        </div>
+      )}
+
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))', gap:10 }}>
-        {componentDetails.map((c, idx) => (
+        {required.map((c, idx) => (
           <ComponentCard
             key={idx}
             detail={c}

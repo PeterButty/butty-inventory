@@ -20,8 +20,9 @@ export function CommitBuildModal({ machine, qty, setQty, onConfirm, onClose }) {
   const { t, products, saving } = useApp()
   if (!machine) return null
 
-  // Worked out once, rather than recomputed for the heading and again for the list.
-  const { max, componentDetails } = calcMachineBuilds(machine, products)
+  // Worked out once, rather than recomputed for the heading and again for the
+  // list. `required` leaves out parts a weldment on the list already supplies.
+  const { max, required } = calcMachineBuilds(machine, products)
 
   return (
     <Modal onClose={onClose} width={400}>
@@ -38,7 +39,7 @@ export function CommitBuildModal({ machine, qty, setQty, onConfirm, onClose }) {
       <div style={{ fontSize:10, color:t.textDim, marginBottom:20 }}>This will deduct all required components from stock.</div>
 
       <div style={{ background:t.inputBg, border:`1px solid ${t.border}`, padding:'12px 14px', marginBottom:20, fontSize:11 }}>
-        {componentDetails.map((c, i) => (
+        {required.map((c, i) => (
           <div key={i} style={{ display:'flex', justifyContent:'space-between', color:t.textMid, marginBottom:4 }}>
             <span>{c.prod?.name}</span>
             <span style={{ color:'#FF9500' }}>−{c.qty * qty} {c.prod?.unit || 'pcs'}</span>

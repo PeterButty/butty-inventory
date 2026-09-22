@@ -302,12 +302,14 @@ export default function Inventory({ user, onSignOut }) {
   }
 
   async function commitBuild(machine, qty) {
-    const { max, componentDetails } = calcMachineBuilds(machine, products)
+    const { max, required } = calcMachineBuilds(machine, products)
     if (qty > max) { showToast(`Cannot build ${qty} — only ${max} possible.`, 'error'); return }
     setSaving(true)
-    // Every component in one transaction — a build can never half-deduct.
+    // Only what the machine consumes on the bench. Parts that went into a
+    // weldment were deducted when the weldment was built; taking them again
+    // here would double-deduct them.
     const err = await db.applyStockDeltas(
-      componentDetails.map(c => ({ product_id:c.productId, delta: -(c.qty * qty) }))
+      required.map(c => ({ product_id:c.productId, delta: -(c.qty * qty) }))
     )
     if (err) showToast(`Nothing was changed — ${err.message}`, 'error')
     else showToast(`✓ ${qty}× ${machine.name} committed — stock deducted.`)
