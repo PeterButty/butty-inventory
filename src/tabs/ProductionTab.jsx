@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useApp } from '../AppContext'
 import { SectionLabel, EmptyState, Pill } from '../components/common'
-import { explodeMachine } from '../lib/builds'
+import { partsForMachine } from '../lib/builds'
 import {
   routeFor, wipFor, movementFor, describeMovement, availableAt, stageTotals, stageLabel,
 } from '../lib/production'
@@ -45,17 +45,21 @@ export default function ProductionTab({ production, onRecord }) {
   const { t, products, machines, saving } = useApp()
 
   const [stageId, setStageId]     = useState(production.stages[0]?.id || '')
-  const [machineId, setMachineId] = useState(machines[0]?.id || ANY_MACHINE)
+  // Default to a machine that actually has a parts list — landing on an empty
+  // one just shows a blank screen.
+  const [machineId, setMachineId] = useState(
+    (machines.find(m => m.components.length > 0) || machines[0])?.id || ANY_MACHINE
+  )
   const [sets, setSets]           = useState(1)
   const [amounts, setAmounts]     = useState({})   // productId -> typed quantity
   const [touched, setTouched]     = useState(false)
 
-  // Everything this machine needs, subassemblies included, so plate parts
-  // buried inside a weldment are still counted.
+  // Everything this machine needs. The machine's own list is taken at face
+  // value where it names a part, since the SW150's list is flat.
   const needed = useMemo(() => {
     const machine = machines.find(m => m.id === machineId)
     if (!machine) return null
-    return explodeMachine(machine, products, Math.max(1, parseInt(sets) || 1))
+    return partsForMachine(machine, products, Math.max(1, parseInt(sets) || 1))
   }, [machineId, machines, products, sets])
 
   // Parts whose drawing calls for the chosen process.

@@ -39,32 +39,47 @@ export function buildBarScale(componentDetails) {
   return Math.max(1, ...componentDetails.map(c => c.canBuild));
 }
 
-// Every part a machine needs, followed all the way down through its
-// subassemblies. The machine's own list names Main Body Weldment; the plate
-// parts are inside that, so anything counting real parts has to go down a
-// level rather than stop at the top.
+// Every part a machine needs, as a Map of product id → pieces for `quantity`
+// machines.
 //
-// Returns a Map of product id → total pieces for `quantity` machines.
-export function explodeMachine(machine, products, quantity = 1) {
-  const totals = new Map();
+// The SW150's list is flat: all 137 parts are named directly, including ones
+// that are also components of a weldment on the same list. So where the
+// machine names a part, that number is the answer — adding what is inside the
+// weldments as well would count the same plate two and three times over.
+// Anything reachable only inside a subassembly is still picked up, so this
+// keeps working if a machine is ever entered as a proper hierarchy instead.
+export function partsForMachine(machine, products, quantity = 1) {
   const byId = new Map(products.map(p => [p.id, p]));
+  const totals = new Map();
 
+  for (const comp of machine.components || []) {
+    totals.set(comp.productId, (totals.get(comp.productId) || 0) + comp.qty * quantity);
+  }
+
+  const nested = new Map();
   function walk(componentList, multiplier, seen) {
     for (const comp of componentList || []) {
       const part = byId.get(comp.productId);
       if (!part) continue;
-
       const pieces = comp.qty * multiplier;
-      totals.set(part.id, (totals.get(part.id) || 0) + pieces);
-
+      nested.set(part.id, (nested.get(part.id) || 0) + pieces);
       // Guard against an assembly that somehow contains itself.
       if (part.partType === 'subassembly' && !seen.has(part.id)) {
         walk(part.bomComponents, pieces, new Set(seen).add(part.id));
       }
     }
   }
+  for (const comp of machine.components || []) {
+    const part = byId.get(comp.productId);
+    if (part?.partType === 'subassembly') {
+      walk(part.bomComponents, comp.qty * quantity, new Set([part.id]));
+    }
+  }
 
-  walk(machine.components, quantity, new Set([machine.id]));
+  for (const [id, qty] of nested) {
+    if (!totals.has(id)) totals.set(id, qty);
+  }
+
   return totals;
 }
 
